@@ -37,6 +37,7 @@ GitHub Pages не поддерживает Node.js серверы и WebSocket. 
    - Закоммитьте изменения
    - Настройте GitHub Pages в настройках репозитория (Settings → Pages)
    - Выберите ветку `main` и папку `/public`
+   - После деплоя обновите `public/config.js` с URL вашего Render сервера и перезапушите изменения
 
 ## Вариант 2: Railway
 

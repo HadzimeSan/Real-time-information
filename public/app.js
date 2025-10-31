@@ -414,6 +414,7 @@ async function uploadFile(file) {
     
     try {
         const uploadUrl = `${serverUrl}/api/upload`;
+        
         const response = await fetch(uploadUrl, {
             method: 'POST',
             body: formData
