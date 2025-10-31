@@ -49,6 +49,29 @@ socket.on('connect', () => {
 socket.on('user-connected', (data) => {
     currentUserId = data.userId;
     usernameEl.textContent = data.username;
+    console.log('User connected:', data);
+});
+
+// Обработка ошибок подключения
+socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    alert('Ошибка подключения к серверу. Проверьте URL сервера в config.js');
+});
+
+socket.on('disconnect', (reason) => {
+    console.warn('Disconnected:', reason);
+    if (reason === 'io server disconnect') {
+        // Сервер принудительно отключил, нужно переподключиться вручную
+        socket.connect();
+    }
+});
+
+socket.on('reconnect', (attemptNumber) => {
+    console.log('Reconnected after', attemptNumber, 'attempts');
+    // Переприсоединяемся к комнате если была выбрана
+    if (currentRoom) {
+        socket.emit('join-room', currentRoom);
+    }
 });
 
 // Получение списка комнат
@@ -63,6 +86,28 @@ socket.on('room-joined', (data) => {
     currentRoom = data.roomId;
     currentRoomName.textContent = `# ${data.roomId}`;
     
+    // Очищаем старые сообщения
+    chatMessages.innerHTML = '';
+    
+    // Загружаем историю сообщений из сервера
+    if (data.messages && Array.isArray(data.messages)) {
+        console.log(`Loading ${data.messages.length} messages from server for room ${data.roomId}`);
+        data.messages.forEach(message => {
+            if (message.type === 'file') {
+                addFileMessage(message, false);
+            } else {
+                addMessage(message, false); // false = не прокручивать до конца сразу
+            }
+        });
+        // Прокручиваем в конец после загрузки всех сообщений
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 100);
+        
+        // Сохраняем историю в localStorage
+        saveMessagesToLocalStorage(data.roomId, data.messages);
+    }
+    
     // Загружаем содержимое документа
     if (data.content) {
         sharedDocument.value = data.content;
@@ -70,11 +115,13 @@ socket.on('room-joined', (data) => {
     }
     
     // Отображаем курсоры других пользователей
-    data.cursors.forEach(cursor => {
-        if (cursor.userId !== currentUserId) {
-            addCursor(cursor.userId, cursor.username, cursor.position, cursor.color);
-        }
-    });
+    if (data.cursors) {
+        data.cursors.forEach(cursor => {
+            if (cursor.userId !== currentUserId) {
+                addCursor(cursor.userId, cursor.username, cursor.position, cursor.color);
+            }
+        });
+    }
     
     // Активируем выбранную комнату
     document.querySelectorAll('.room-item').forEach(item => {
@@ -87,7 +134,19 @@ socket.on('room-joined', (data) => {
 
 // Обработка сообщений
 socket.on('message', (message) => {
+    console.log('Received message:', message);
     addMessage(message);
+    
+    // Сохраняем сообщение в localStorage
+    if (currentRoom) {
+        const messages = getMessagesFromLocalStorage(currentRoom) || [];
+        messages.push(message);
+        // Ограничиваем до 100 сообщений в localStorage
+        if (messages.length > 100) {
+            messages.splice(0, messages.length - 100);
+        }
+        saveMessagesToLocalStorage(currentRoom, messages);
+    }
 });
 
 // Typing indicators
@@ -147,7 +206,18 @@ socket.on('cursor-updated', (data) => {
 
 // Файлы
 socket.on('file-uploaded', (fileMessage) => {
+    console.log('Received file message:', fileMessage);
     addFileMessage(fileMessage);
+    
+    // Сохраняем файловое сообщение в localStorage
+    if (currentRoom) {
+        const messages = getMessagesFromLocalStorage(currentRoom) || [];
+        messages.push(fileMessage);
+        if (messages.length > 100) {
+            messages.splice(0, messages.length - 100);
+        }
+        saveMessagesToLocalStorage(currentRoom, messages);
+    }
 });
 
 // Онлайн пользователи
@@ -340,16 +410,40 @@ function addRoomToList(roomId) {
 
 function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text || !currentRoom) return;
+    if (!text) {
+        console.warn('Attempted to send empty message');
+        return;
+    }
+    if (!currentRoom) {
+        console.error('No room selected');
+        alert('Выберите канал для отправки сообщения');
+        return;
+    }
     
-    socket.emit('message', { text });
+    console.log('Sending message:', { text, room: currentRoom });
+    socket.emit('message', { text }, (response) => {
+        if (response && response.error) {
+            console.error('Error sending message:', response.error);
+            alert('Ошибка отправки сообщения: ' + response.error);
+        } else {
+            console.log('Message sent successfully');
+        }
+    });
     messageInput.value = '';
     socket.emit('typing-stop');
 }
 
-function addMessage(message) {
+function addMessage(message, scroll = true) {
+    // Проверяем, не добавлено ли сообщение уже
+    const existingMessage = document.querySelector(`[data-message-id="${message.id}"]`);
+    if (existingMessage) {
+        console.log('Message already exists:', message.id);
+        return;
+    }
+    
     const messageEl = document.createElement('div');
     messageEl.className = 'message';
+    messageEl.dataset.messageId = message.id;
     
     if (message.userId === currentUserId) {
         messageEl.classList.add('own');
@@ -370,12 +464,22 @@ function addMessage(message) {
     messageEl.appendChild(textEl);
     
     chatMessages.appendChild(messageEl);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (scroll) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 }
 
-function addFileMessage(fileMessage) {
+function addFileMessage(fileMessage, scroll = true) {
+    // Проверяем, не добавлено ли сообщение уже
+    const existingMessage = document.querySelector(`[data-message-id="${fileMessage.id}"]`);
+    if (existingMessage) {
+        console.log('File message already exists:', fileMessage.id);
+        return;
+    }
+    
     const messageEl = document.createElement('div');
     messageEl.className = 'message';
+    messageEl.dataset.messageId = fileMessage.id;
     
     if (fileMessage.userId === currentUserId) {
         messageEl.classList.add('own');
@@ -400,7 +504,9 @@ function addFileMessage(fileMessage) {
     messageEl.appendChild(fileEl);
     
     chatMessages.appendChild(messageEl);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (scroll) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 }
 
 async function uploadFile(file) {
@@ -555,11 +661,40 @@ function generateUserColor() {
     return colors[Math.floor(Math.random() * colors.length)];
 }
 
-// Получаем ID пользователя при подключении
-socket.on('connect', () => {
-    // Socket.io автоматически назначает socket.id, но нам нужен userId от сервера
-    // Можно добавить событие от сервера с userId
-});
+// Функции для работы с localStorage
+function saveMessagesToLocalStorage(roomId, messages) {
+    try {
+        const key = `chat_history_${roomId}`;
+        localStorage.setItem(key, JSON.stringify(messages));
+    } catch (e) {
+        console.warn('Failed to save messages to localStorage:', e);
+    }
+}
+
+function getMessagesFromLocalStorage(roomId) {
+    try {
+        const key = `chat_history_${roomId}`;
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : null;
+    } catch (e) {
+        console.warn('Failed to get messages from localStorage:', e);
+        return null;
+    }
+}
+
+// Загружаем историю из localStorage при присоединении к комнате (как бэкап)
+function loadMessagesFromLocalStorage(roomId) {
+    const messages = getMessagesFromLocalStorage(roomId);
+    if (messages && messages.length > 0) {
+        console.log(`Loading ${messages.length} messages from localStorage for room ${roomId}`);
+        messages.forEach(message => {
+            addMessage(message, false);
+        });
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 100);
+    }
+}
 
 // Регистрация Service Worker для push-уведомлений
 if ('serviceWorker' in navigator) {

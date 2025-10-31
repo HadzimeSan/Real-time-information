@@ -34,13 +34,13 @@ const upload = multer({ storage: storage });
 
 // Хранилище данных
 const users = new Map(); // socketId -> user info
-const rooms = new Map(); // roomId -> { users: Set, content: string, cursors: Map }
+const rooms = new Map(); // roomId -> { users: Set, content: string, cursors: Map, messages: Array }
 const typingUsers = new Map(); // roomId -> Set of typing users
 
 // Инициализация дефолтных комнат
-rooms.set('general', { users: new Set(), content: '', cursors: new Map() });
-rooms.set('random', { users: new Set(), content: '', cursors: new Map() });
-rooms.set('development', { users: new Set(), content: '', cursors: new Map() });
+rooms.set('general', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+rooms.set('random', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+rooms.set('development', { users: new Set(), content: '', cursors: new Map(), messages: [] });
 
 // Middleware для аутентификации (упрощенная версия)
 io.use((socket, next) => {
@@ -76,11 +76,16 @@ io.on('connection', (socket) => {
   // Присоединение к комнате
   socket.on('join-room', (roomId) => {
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, { users: new Set(), content: '', cursors: new Map() });
+      rooms.set(roomId, { users: new Set(), content: '', cursors: new Map(), messages: [] });
     }
 
     const room = rooms.get(roomId);
     const user = users.get(socket.id);
+
+    if (!user) {
+      console.error('User not found for socket:', socket.id);
+      return;
+    }
 
     // Покидаем предыдущую комнату
     if (user.currentRoom && rooms.has(user.currentRoom)) {
@@ -96,6 +101,7 @@ io.on('connection', (socket) => {
     socket.emit('room-joined', {
       roomId,
       content: room.content,
+      messages: room.messages.slice(-100), // Последние 100 сообщений
       cursors: Array.from(room.cursors.entries()).map(([userId, data]) => ({
         userId,
         ...data
@@ -114,17 +120,45 @@ io.on('connection', (socket) => {
   // Отправка сообщения
   socket.on('message', (data) => {
     const user = users.get(socket.id);
-    if (!user || !user.currentRoom) return;
+    if (!user) {
+      console.error('User not found for socket:', socket.id);
+      return;
+    }
+    if (!user.currentRoom) {
+      console.error('User has no current room:', user.username);
+      return;
+    }
+    if (!data || !data.text || !data.text.trim()) {
+      console.error('Empty message text');
+      return;
+    }
+
+    const room = rooms.get(user.currentRoom);
+    if (!room) {
+      console.error('Room not found:', user.currentRoom);
+      return;
+    }
 
     const message = {
       id: uuidv4(),
       userId: user.id,
       username: user.username,
-      text: data.text,
+      text: data.text.trim(),
       timestamp: new Date().toISOString(),
       roomId: user.currentRoom
     };
 
+    // Сохраняем сообщение в историю комнаты
+    room.messages.push(message);
+    
+    // Ограничиваем историю до последних 500 сообщений
+    if (room.messages.length > 500) {
+      room.messages = room.messages.slice(-500);
+    }
+
+    console.log(`Message sent by ${user.username} in ${user.currentRoom}:`, message.text.substring(0, 50));
+    
+    // Отправляем сообщение всем в комнате
     io.to(user.currentRoom).emit('message', message);
   });
 
@@ -222,6 +256,9 @@ io.on('connection', (socket) => {
     const user = users.get(socket.id);
     if (!user || !user.currentRoom) return;
 
+    const room = rooms.get(user.currentRoom);
+    if (!room) return;
+
     const fileMessage = {
       id: uuidv4(),
       userId: user.id,
@@ -231,8 +268,15 @@ io.on('connection', (socket) => {
       fileSize: data.fileSize,
       fileType: data.fileType,
       timestamp: new Date().toISOString(),
-      roomId: user.currentRoom
+      roomId: user.currentRoom,
+      type: 'file'
     };
+
+    // Сохраняем файловое сообщение в историю
+    room.messages.push(fileMessage);
+    if (room.messages.length > 500) {
+      room.messages = room.messages.slice(-500);
+    }
 
     io.to(user.currentRoom).emit('file-uploaded', fileMessage);
   });
