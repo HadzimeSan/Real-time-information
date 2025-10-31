@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Collaborative Chat</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar с комнатами -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>💬 ChatApp</h1>
+                <div class="user-info">
+                    <div class="status-indicator online" id="userStatus"></div>
+                    <span id="username">Loading...</span>
+                </div>
+            </div>
+
+            <div class="rooms-section">
+                <div class="section-header">
+                    <h2>Каналы</h2>
+                    <button class="btn-icon" id="createRoomBtn" title="Создать канал">+</button>
+                </div>
+                <ul class="rooms-list" id="roomsList"></ul>
+            </div>
+
+            <div class="online-users-section">
+                <div class="section-header">
+                    <h2>Онлайн (<span id="onlineCount">0</span>)</h2>
+                </div>
+                <ul class="users-list" id="onlineUsersList"></ul>
+            </div>
+        </aside>
+
+        <!-- Основной контент -->
+        <main class="main-content">
+            <!-- Заголовок комнаты -->
+            <header class="chat-header">
+                <div class="chat-header-left">
+                    <h2 id="currentRoomName">Выберите канал</h2>
+                    <div class="typing-indicator" id="typingIndicator" style="display: none;"></div>
+                </div>
+                <div class="chat-header-right">
+                    <div class="room-users" id="roomUsers"></div>
+                </div>
+            </header>
+
+            <!-- Область чата -->
+            <div class="chat-area">
+                <div class="chat-messages" id="chatMessages"></div>
+                
+                <!-- Совместное редактирование -->
+                <div class="collaborative-editor" id="collaborativeEditor" style="display: none;">
+                    <div class="editor-header">
+                        <h3>Совместное редактирование</h3>
+                        <button class="btn-close" id="closeEditorBtn">×</button>
+                    </div>
+                    <div class="editor-container">
+                        <div class="cursors-layer" id="cursorsLayer"></div>
+                        <textarea 
+                            id="sharedDocument" 
+                            placeholder="Начните редактировать... Все изменения видны в реальном времени!"
+                            class="shared-textarea"
+                        ></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Поле ввода -->
+            <div class="chat-input-area">
+                <div class="input-toolbar">
+                    <button class="btn-toolbar" id="toggleEditorBtn" title="Совместное редактирование">
+                        📝
+                    </button>
+                    <button class="btn-toolbar" id="uploadFileBtn" title="Загрузить файл">
+                        📎
+                    </button>
+                    <input type="file" id="fileInput" style="display: none;" multiple>
+                </div>
+                <div class="input-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="Напишите сообщение..."
+                        rows="1"
+                    ></textarea>
+                    <button id="sendButton" class="send-button">Отправить</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Модальное окно для создания комнаты -->
+    <div class="modal" id="createRoomModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Создать новый канал</h3>
+                <button class="btn-close" id="closeModalBtn">×</button>
+            </div>
+            <div class="modal-body">
+                <input 
+                    type="text" 
+                    id="newRoomName" 
+                    placeholder="Название канала"
+                    class="modal-input"
+                >
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelRoomBtn">Отмена</button>
+                <button class="btn-primary" id="createRoomConfirmBtn">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
