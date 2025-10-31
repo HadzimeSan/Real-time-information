@@ -1,5 +1,7 @@
 // Инициализация Socket.io
-const socket = io({
+// Используем SERVER_URL из config.js, если он доступен, иначе текущий хост
+const serverUrl = typeof SERVER_URL !== 'undefined' ? SERVER_URL : window.location.origin;
+const socket = io(serverUrl, {
     auth: {
         username: prompt('Введите ваше имя:', `User_${Math.random().toString(36).substr(2, 9)}`) || `User_${Math.random().toString(36).substr(2, 9)}`
     }
@@ -411,7 +413,8 @@ async function uploadFile(file) {
     formData.append('file', file);
     
     try {
-        const response = await fetch('/api/upload', {
+        const uploadUrl = `${serverUrl}/api/upload`;
+        const response = await fetch(uploadUrl, {
             method: 'POST',
             body: formData
         });

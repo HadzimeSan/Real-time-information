@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Collaborative Chat - GitHub Pages</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 18px;
+        }
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #4a90e2;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: left;
+            border-radius: 8px;
+        }
+        .info-box h2 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .info-box p {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #4a90e2;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin: 10px;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #357abd;
+        }
+        .btn-secondary {
+            background: #50c878;
+        }
+        .btn-secondary:hover {
+            background: #45b068;
+        }
+        .features {
+            text-align: left;
+            margin: 30px 0;
+        }
+        .features h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        .features ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .features li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+        }
+        .features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #50c878;
+            font-weight: bold;
+            font-size: 20px;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💬 Real-time Collaborative Chat</h1>
+        <p class="subtitle">Приложение для совместной работы в реальном времени</p>
+        
+        <div class="info-box">
+            <h2>📋 О проекте</h2>
+            <p>Это real-time чат приложение с коллаборативными функциями, построенное на WebSockets (Socket.io).</p>
+            <p><strong>⚠️ Важно:</strong> GitHub Pages поддерживает только статические сайты и не может запустить Node.js сервер с WebSocket.</p>
+        </div>
+
+        <div class="features">
+            <h3>🌟 Функции:</h3>
+            <ul>
+                <li>Комнаты/каналы (как в Slack)</li>
+                <li>Typing indicators и онлайн-статусы</li>
+                <li>Совместное редактирование текста (как в Google Docs)</li>
+                <li>Drag & Drop загрузка файлов</li>
+                <li>Push-уведомления</li>
+            </ul>
+        </div>
+
+        <div class="info-box">
+            <h2>🚀 Как запустить</h2>
+            <p><strong>Вариант 1: Локальный запуск</strong></p>
+            <p>Клонируйте репозиторий и выполните:</p>
+            <p><code>npm install</code> → <code>npm start</code></p>
+            <p>Откройте <code>http://localhost:3000</code></p>
+            
+            <p style="margin-top: 20px;"><strong>Вариант 2: Деплой на Render/Railway</strong></p>
+            <p>Для работы в интернете задеплойте сервер на платформу, поддерживающую WebSocket. Подробные инструкции в файле <code>DEPLOY.md</code></p>
+        </div>
+
+        <div style="margin-top: 30px;">
+            <a href="https://github.com/HadzimeSan/Real-time-information" class="btn" target="_blank">
+                📦 Открыть на GitHub
+            </a>
+            <a href="DEPLOY.md" class="btn btn-secondary" target="_blank">
+                📖 Инструкция по деплою
+            </a>
+        </div>
+
+        <div class="info-box" style="margin-top: 30px; background: #fff3cd; border-color: #ffc107;">
+            <h2>💡 Примечание</h2>
+            <p>Для полноценной работы приложения нужен запущенный сервер. GitHub Pages показывает только эту информационную страницу.</p>
+            <p>Следуйте инструкциям в <code>DEPLOY.md</code> для деплоя на облачную платформу.</p>
+        </div>
+    </div>
+</body>
+</html>
+
