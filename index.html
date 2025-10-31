@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Collaborative Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 700px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 36px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 18px;
+            text-align: center;
+        }
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #4a90e2;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+        }
+        .info-box.warning {
+            background: #fff3cd;
+            border-color: #ffc107;
+        }
+        .info-box.success {
+            background: #d4edda;
+            border-color: #28a745;
+        }
+        .info-box h2 {
+            color: #2c3e50;
+            margin-bottom: 12px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .info-box p {
+            color: #555;
+            line-height: 1.7;
+            margin-bottom: 10px;
+        }
+        .info-box ul {
+            margin-left: 20px;
+            color: #555;
+            line-height: 1.8;
+        }
+        .info-box code {
+            background: rgba(0,0,0,0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e74c3c;
+            font-size: 14px;
+        }
+        .btn-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #4a90e2;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #357abd;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
+        }
+        .btn-secondary {
+            background: #50c878;
+        }
+        .btn-secondary:hover {
+            background: #45b068;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #4a90e2;
+            color: #4a90e2;
+        }
+        .btn-outline:hover {
+            background: #4a90e2;
+            color: white;
+        }
+        .features {
+            margin: 30px 0;
+        }
+        .features h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+        .features ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .features li {
+            padding: 12px 0;
+            padding-left: 35px;
+            position: relative;
+            color: #555;
+            font-size: 16px;
+        }
+        .features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #50c878;
+            font-weight: bold;
+            font-size: 24px;
+        }
+        .steps {
+            counter-reset: step-counter;
+            list-style: none;
+            padding-left: 0;
+        }
+        .steps li {
+            counter-increment: step-counter;
+            padding: 15px 0 15px 50px;
+            position: relative;
+            color: #555;
+            line-height: 1.6;
+        }
+        .steps li:before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 15px;
+            width: 35px;
+            height: 35px;
+            background: #4a90e2;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .link {
+            color: #4a90e2;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💬 Real-time Collaborative Chat</h1>
+        <p class="subtitle">Приложение для совместной работы в реальном времени</p>
+        
+        <div class="info-box warning">
+            <h2>⚠️ Важная информация</h2>
+            <p><strong>GitHub Pages поддерживает только статические сайты</strong> и не может запустить Node.js сервер с WebSocket.</p>
+            <p>Для работы приложения необходимо задеплоить сервер на платформу, поддерживающую WebSocket (например, <strong>Render.com</strong> - бесплатно).</p>
+        </div>
+
+        <div class="features">
+            <h3>🌟 Функции приложения:</h3>
+            <ul>
+                <li>Комнаты/каналы (как в Slack)</li>
+                <li>Typing indicators и онлайн-статусы</li>
+                <li>Совместное редактирование текста (как в Google Docs)</li>
+                <li>Drag & Drop загрузка файлов</li>
+                <li>Push-уведомления</li>
+            </ul>
+        </div>
+
+        <div class="info-box success">
+            <h2>🚀 Быстрый старт (Render.com - бесплатно)</h2>
+            <ol class="steps">
+                <li>Зарегистрируйтесь на <a href="https://render.com" target="_blank" class="link">Render.com</a> (можно через GitHub)</li>
+                <li>Создайте Web Service: <strong>New +</strong> → <strong>Web Service</strong></li>
+                <li>Подключите репозиторий <code>Real-time-information</code></li>
+                <li>Настройки возьмутся автоматически из <code>render.yaml</code></li>
+                <li>После деплоя получите URL сервера (например: <code>https://your-app.onrender.com</code>)</li>
+                <li>Обновите <code>public/config.js</code> с URL вашего сервера</li>
+                <li>Настройте GitHub Pages: <strong>Settings</strong> → <strong>Pages</strong> → папка <code>/public</code></li>
+            </ol>
+        </div>
+
+        <div class="info-box">
+            <h2>📦 Локальный запуск</h2>
+            <p>Для тестирования на вашем компьютере:</p>
+            <pre style="background: #2c3e50; color: #fff; padding: 15px; border-radius: 8px; overflow-x: auto;"><code style="color: #fff;">git clone https://github.com/HadzimeSan/Real-time-information.git
+cd Real-time-information
+npm install
+mkdir uploads
+npm start</code></pre>
+            <p style="margin-top: 15px;">Затем откройте <code>http://localhost:3000</code> в браузере.</p>
+        </div>
+
+        <div class="btn-container">
+            <a href="https://github.com/HadzimeSan/Real-time-information" class="btn" target="_blank">
+                📦 Открыть на GitHub
+            </a>
+            <a href="DEPLOY.md" class="btn btn-secondary" target="_blank">
+                📖 Подробная инструкция
+            </a>
+            <a href="README.md" class="btn btn-outline" target="_blank">
+                📄 README
+            </a>
+        </div>
+
+        <div class="info-box" style="margin-top: 30px;">
+            <h2>💡 Технологии</h2>
+            <p><strong>Backend:</strong> Node.js, Express, Socket.io</p>
+            <p><strong>Frontend:</strong> Vanilla JavaScript, HTML5, CSS3</p>
+            <p><strong>Дополнительно:</strong> Multer (загрузка файлов), Service Worker (PWA)</p>
+        </div>
+    </div>
+</body>
+</html>
+
