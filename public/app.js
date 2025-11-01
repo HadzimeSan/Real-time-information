@@ -699,18 +699,7 @@ function loadMessagesFromLocalStorage(roomId) {
     }
 }
 
-// Кнопка выхода
-
-const logoutBtn = document.getElementById('logoutBtn');
-if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
-        if (confirm('Вы уверены, что хотите выйти?')) {
-            localStorage.removeItem('authToken');
-            socket.disconnect();
-            window.location.href = '/auth.html';
-        }
-    });
-}
+// Кнопка выхода обрабатывается в setupUIHandlers
 
 // Регистрация Service Worker для push-уведомлений
 if ('serviceWorker' in navigator) {
@@ -884,14 +873,54 @@ function setupUIHandlers(socket) {
         createRoomModal.classList.remove('active');
     });
 
-    // Кнопка выхода
+    // Кнопка выхода и модальное окно
     const logoutBtn = document.getElementById('logoutBtn');
+    const logoutModal = document.getElementById('logoutModal');
+    const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+    const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+    const closeLogoutModalBtn = document.getElementById('closeLogoutModalBtn');
+
+    // Открытие модального окна при нажатии на кнопку выхода
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            if (confirm('Вы уверены, что хотите выйти?')) {
-                localStorage.removeItem('authToken');
+        logoutBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (logoutModal) {
+                logoutModal.classList.add('active');
+            }
+        });
+    }
+
+    // Подтверждение выхода
+    if (confirmLogoutBtn) {
+        confirmLogoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('authToken');
+            if (socket) {
                 socket.disconnect();
-                window.location.href = '/auth.html';
+            }
+            window.location.href = '/auth.html';
+        });
+    }
+
+    // Отмена выхода
+    const closeLogoutModal = () => {
+        if (logoutModal) {
+            logoutModal.classList.remove('active');
+        }
+    };
+
+    if (cancelLogoutBtn) {
+        cancelLogoutBtn.addEventListener('click', closeLogoutModal);
+    }
+
+    if (closeLogoutModalBtn) {
+        closeLogoutModalBtn.addEventListener('click', closeLogoutModal);
+    }
+
+    // Закрытие модального окна при клике вне его
+    if (logoutModal) {
+        logoutModal.addEventListener('click', (e) => {
+            if (e.target === logoutModal) {
+                closeLogoutModal();
             }
         });
     }

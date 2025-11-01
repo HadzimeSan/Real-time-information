@@ -580,6 +580,22 @@ body {
     background-color: var(--border-color);
 }
 
+.btn-danger {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+
+.modal-body p {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
 /* Drag & Drop */
 .drag-over {
     background-color: rgba(74, 144, 226, 0.1);
