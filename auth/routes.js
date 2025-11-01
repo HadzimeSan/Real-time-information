@@ -189,7 +189,7 @@ router.post('/register', async (req, res) => {
     
     // Создаем промис для отправки email с таймаутом
     const sendEmailWithTimeout = Promise.race([
-      sendEmailWithRetry(2), // 2 попытки отправки
+      sendEmailWithRetry(3), // 3 попытки отправки (с автоматическим переключением портов)
       new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error('Таймаут отправки email (45 секунд)'));
