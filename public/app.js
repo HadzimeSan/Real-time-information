@@ -1,9 +1,18 @@
 // Инициализация Socket.io
 // Используем SERVER_URL из config.js, если он доступен, иначе текущий хост
 const serverUrl = typeof SERVER_URL !== 'undefined' ? SERVER_URL : window.location.origin;
+
+// Получаем токен из localStorage или запрашиваем аутентификацию
+const authToken = localStorage.getItem('authToken');
+
+if (!authToken) {
+    // Если нет токена, перенаправляем на страницу входа
+    window.location.href = '/auth.html';
+}
+
 const socket = io(serverUrl, {
     auth: {
-        username: prompt('Введите ваше имя:', `User_${Math.random().toString(36).substr(2, 9)}`) || `User_${Math.random().toString(36).substr(2, 9)}`
+        token: authToken
     }
 });
 
@@ -43,7 +52,19 @@ const newRoomName = document.getElementById('newRoomName');
 // Инициализация
 socket.on('connect', () => {
     console.log('Connected to server');
-    usernameEl.textContent = socket.auth.username;
+    if (socket.user && socket.user.username) {
+        usernameEl.textContent = socket.user.username;
+    } else {
+        usernameEl.textContent = socket.username || 'Guest';
+    }
+});
+
+socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    if (error.message === 'Unauthorized') {
+        localStorage.removeItem('authToken');
+        window.location.href = '/auth.html';
+    }
 });
 
 socket.on('user-connected', (data) => {
@@ -694,6 +715,18 @@ function loadMessagesFromLocalStorage(roomId) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }, 100);
     }
+}
+
+// Кнопка выхода
+const logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        if (confirm('Вы уверены, что хотите выйти?')) {
+            localStorage.removeItem('authToken');
+            socket.disconnect();
+            window.location.href = '/auth.html';
+        }
+    });
 }
 
 // Регистрация Service Worker для push-уведомлений

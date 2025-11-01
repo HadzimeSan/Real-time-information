@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -5,6 +6,10 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
+const session = require('express-session');
+const passport = require('./auth/passport-config');
+const authRoutes = require('./auth/routes');
+const { verifyToken, getUserById } = require('./auth/auth');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +24,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
+
+// Настройка сессий для Passport
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-session-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Аутентификация маршруты
+app.use('/auth', authRoutes);
 
 // Настройка Multer для загрузки файлов
 const storage = multer.diskStorage({
@@ -42,12 +60,41 @@ rooms.set('general', { users: new Set(), content: '', cursors: new Map(), messag
 rooms.set('random', { users: new Set(), content: '', cursors: new Map(), messages: [] });
 rooms.set('development', { users: new Set(), content: '', cursors: new Map(), messages: [] });
 
-// Middleware для аутентификации (упрощенная версия)
-io.use((socket, next) => {
-  const username = socket.handshake.auth.username || `User_${Math.random().toString(36).substr(2, 9)}`;
-  socket.username = username;
-  socket.userId = uuidv4();
-  next();
+// Middleware для аутентификации Socket.io
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth.token;
+    
+    if (token) {
+      // Проверяем JWT токен
+      const decoded = verifyToken(token);
+      if (decoded) {
+        const user = await getUserById(decoded.userId);
+        if (user) {
+          socket.userId = user.id;
+          socket.username = user.username;
+          socket.userEmail = user.email;
+          socket.user = user;
+          return next();
+        }
+      }
+    }
+    
+    // Если токен не валиден, разрешаем анонимный доступ (для обратной совместимости)
+    const username = socket.handshake.auth.username || `Guest_${Math.random().toString(36).substr(2, 9)}`;
+    socket.username = username;
+    socket.userId = uuidv4();
+    socket.userEmail = null;
+    socket.user = null;
+    next();
+  } catch (error) {
+    console.error('Socket auth error:', error);
+    // Разрешаем подключение как гость
+    const username = socket.handshake.auth.username || `Guest_${Math.random().toString(36).substr(2, 9)}`;
+    socket.username = username;
+    socket.userId = uuidv4();
+    next();
+  }
 });
 
 io.on('connection', (socket) => {
