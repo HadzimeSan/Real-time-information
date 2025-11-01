@@ -247,14 +247,27 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
     passport.authenticate('github', { session: false, failureRedirect: '/auth.html?error=oauth_failed' }),
     (req, res) => {
       try {
+        console.log('GitHub OAuth callback received, user:', req.user ? {
+          id: req.user.id,
+          username: req.user.username,
+          email: req.user.email
+        } : 'null');
+        
         if (!req.user) {
+          console.error('GitHub OAuth callback: req.user is null');
           return res.redirect('/auth.html?error=no_user');
         }
+        
         const token = generateToken(req.user);
+        console.log('GitHub OAuth successful, redirecting with token');
         res.redirect(`/?token=${token}`);
       } catch (error) {
-        console.error('GitHub OAuth callback error:', error);
-        res.redirect('/auth.html?error=' + encodeURIComponent(error.message));
+        console.error('GitHub OAuth callback error:', {
+          message: error.message,
+          stack: error.stack,
+          user: req.user ? { id: req.user.id } : 'null'
+        });
+        res.redirect('/auth.html?error=' + encodeURIComponent(error.message || 'oauth_failed'));
       }
     }
   );
