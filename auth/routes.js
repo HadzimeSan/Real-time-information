@@ -264,7 +264,13 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
         if (!user) {
           console.error('GitHub OAuth: No user returned');
           console.error('Info:', info);
-          return res.redirect('/auth.html?error=' + encodeURIComponent(info?.message || 'Failed to authenticate with GitHub'));
+          let errorMsg = 'Failed to authenticate with GitHub';
+          if (info?.message) {
+            errorMsg = info.message;
+          } else if (info?.error) {
+            errorMsg = `GitHub authentication error: ${info.error}`;
+          }
+          return res.redirect('/auth.html?error=' + encodeURIComponent(errorMsg));
         }
         
         try {

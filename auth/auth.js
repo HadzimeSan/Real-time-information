@@ -253,6 +253,12 @@ async function getGitHubEmail(accessToken) {
   try {
     const https = require('https');
     return new Promise((resolve, reject) => {
+      if (!accessToken) {
+        console.log('GitHub access token is missing, cannot fetch emails');
+        resolve(null);
+        return;
+      }
+
       const options = {
         hostname: 'api.github.com',
         path: '/user/emails',
@@ -261,11 +267,15 @@ async function getGitHubEmail(accessToken) {
           'User-Agent': 'ChatApp',
           'Authorization': `token ${accessToken}`,
           'Accept': 'application/vnd.github.v3+json'
-        }
+        },
+        timeout: 10000 // 10 секунд таймаут
       };
 
       const req = https.request(options, (res) => {
         let data = '';
+        
+        // Логируем статус ответа
+        console.log(`GitHub API response status: ${res.statusCode}`);
         
         res.on('data', (chunk) => {
           data += chunk;
@@ -273,23 +283,57 @@ async function getGitHubEmail(accessToken) {
         
         res.on('end', () => {
           try {
+            // Если статус не 200, логируем ошибку
+            if (res.statusCode !== 200) {
+              console.error(`GitHub API error ${res.statusCode}:`, data);
+              
+              // Для 401/403 - токен недействителен или нет доступа
+              if (res.statusCode === 401 || res.statusCode === 403) {
+                console.error('GitHub API: Unauthorized or forbidden. Token may be invalid or missing user:email scope.');
+              }
+              
+              resolve(null);
+              return;
+            }
+            
             const emails = JSON.parse(data);
-            // Ищем primary email или берем первый
-            const primaryEmail = emails.find(e => e.primary) || emails[0];
+            
+            // Проверяем что это массив
+            if (!Array.isArray(emails) || emails.length === 0) {
+              console.log('GitHub API: No emails found or invalid response format');
+              resolve(null);
+              return;
+            }
+            
+            // Ищем primary email или берем первый verified email
+            const primaryEmail = emails.find(e => e.primary && e.verified) || 
+                               emails.find(e => e.verified) ||
+                               emails.find(e => e.primary) || 
+                               emails[0];
+            
             if (primaryEmail && primaryEmail.email) {
+              console.log(`GitHub email found: ${primaryEmail.email} (verified: ${primaryEmail.verified || false}, primary: ${primaryEmail.primary || false})`);
               resolve(primaryEmail.email);
             } else {
+              console.log('GitHub API: No valid email found in response');
               resolve(null);
             }
           } catch (error) {
-            console.error('Error parsing GitHub emails:', error);
+            console.error('Error parsing GitHub emails response:', error);
+            console.error('Response data:', data.substring(0, 200)); // Первые 200 символов для отладки
             resolve(null);
           }
         });
       });
       
       req.on('error', (error) => {
-        console.error('Error fetching GitHub email:', error);
+        console.error('Error fetching GitHub email (network error):', error.message);
+        resolve(null);
+      });
+      
+      req.on('timeout', () => {
+        console.error('GitHub API request timed out');
+        req.destroy();
         resolve(null);
       });
       
@@ -317,12 +361,22 @@ async function findOrCreateOAuthUser(provider, profile, accessToken = null) {
   
   // Для GitHub: если email не найден, запрашиваем через API
   if (!email && provider === 'github' && accessToken) {
-    console.log('GitHub email not in profile, fetching from API...');
-    email = await getGitHubEmail(accessToken);
-    if (email) {
-      console.log('GitHub email fetched from API:', email);
-    } else {
-      console.log('GitHub email not available from API (may be private)');
+    console.log('GitHub email not in profile, attempting to fetch from API...');
+    try {
+      email = await getGitHubEmail(accessToken);
+      if (email) {
+        console.log('GitHub email successfully fetched from API:', email);
+      } else {
+        console.log('GitHub email not available from API. Possible reasons:');
+        console.log('- Email is private in GitHub settings');
+        console.log('- OAuth app does not have user:email scope');
+        console.log('- Access token is invalid or expired');
+        console.log('- Network error occurred');
+        // Продолжаем без email - будет создан временный
+      }
+    } catch (error) {
+      console.error('Error fetching GitHub email from API:', error);
+      // Продолжаем без email - будет создан временный
     }
   }
   
