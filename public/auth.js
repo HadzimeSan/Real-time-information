@@ -206,10 +206,34 @@ async function checkAuth() {
     }
 }
 
+// Скрываем OAuth кнопки если провайдеры не настроены
+async function checkOAuthProviders() {
+    try {
+        // Пробуем получить доступ к OAuth endpoints
+        // Если они недоступны, скрываем кнопки
+        const providers = ['google', 'github', 'facebook'];
+        for (const provider of providers) {
+            try {
+                await fetch(`/auth/${provider}`, { method: 'HEAD' });
+            } catch {
+                const btn = document.querySelector(`.oauth-btn.${provider}`);
+                if (btn) {
+                    btn.style.display = 'none';
+                }
+            }
+        }
+    } catch (error) {
+        console.log('OAuth providers check failed:', error);
+    }
+}
+
 // Если пользователь уже авторизован, перенаправляем
 checkAuth().then(isAuth => {
     if (isAuth) {
         window.location.href = '/';
+    } else {
+        // Проверяем доступность OAuth провайдеров
+        checkOAuthProviders();
     }
 });
 

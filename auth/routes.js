@@ -212,24 +212,30 @@ router.post('/2fa/verify', async (req, res) => {
   }
 });
 
-// OAuth маршруты
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-router.get('/google/callback', passport.authenticate('google', { session: false }), (req, res) => {
-  const token = generateToken(req.user);
-  res.redirect(`/?token=${token}`);
-});
+// OAuth маршруты (только если настроены)
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+  router.get('/google/callback', passport.authenticate('google', { session: false }), (req, res) => {
+    const token = generateToken(req.user);
+    res.redirect(`/?token=${token}`);
+  });
+}
 
-router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
-router.get('/github/callback', passport.authenticate('github', { session: false }), (req, res) => {
-  const token = generateToken(req.user);
-  res.redirect(`/?token=${token}`);
-});
+if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
+  router.get('/github/callback', passport.authenticate('github', { session: false }), (req, res) => {
+    const token = generateToken(req.user);
+    res.redirect(`/?token=${token}`);
+  });
+}
 
-router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
-router.get('/facebook/callback', passport.authenticate('facebook', { session: false }), (req, res) => {
-  const token = generateToken(req.user);
-  res.redirect(`/?token=${token}`);
-});
+if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+  router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+  router.get('/facebook/callback', passport.authenticate('facebook', { session: false }), (req, res) => {
+    const token = generateToken(req.user);
+    res.redirect(`/?token=${token}`);
+  });
+}
 
 // Проверка токена
 router.get('/verify', async (req, res) => {
