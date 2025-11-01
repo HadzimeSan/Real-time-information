@@ -37,7 +37,6 @@ const transporter = nodemailer.createTransport({
   // Таймауты для предотвращения зависаний
   connectionTimeout: 10000, // 10 секунд на соединение
   greetingTimeout: 10000, // 10 секунд на приветствие
-  socketTimeout: 10000, // 10 секунд на socket операции
   socketTimeout: 30000 // 30 секунд общий таймаут
 });
 
