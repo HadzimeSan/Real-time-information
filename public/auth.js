@@ -235,7 +235,7 @@ async function checkAuth() {
 
 // Проверяем OAuth провайдеры (но НЕ скрываем кнопки - оставляем их всегда видимыми)
 async function checkOAuthProviders() {
-    const providers = ['google', 'github', 'facebook'];
+    const providers = ['google', 'github'];
     
     for (const provider of providers) {
         const btn = document.querySelector(`.oauth-btn.${provider}`);
