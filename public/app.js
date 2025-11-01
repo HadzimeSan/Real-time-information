@@ -36,10 +36,21 @@ function initializeApp() {
 
 // Инициализация Socket.io
 function initializeSocket(authToken) {
+    // Если socket уже существует, отключаем его
+    
+    if (socket && socket.connected) {
+        console.log('Disconnecting existing socket');
+        socket.disconnect();
+    }
+    
     socket = io(serverUrl, {
         auth: {
             token: authToken
-        }
+        },
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000
     });
 
     // Перемещаем все обработчики socket в эту функцию
@@ -83,49 +94,77 @@ const newRoomName = document.getElementById('newRoomName');
 function setupSocketHandlers(socket) {
     // Инициализация
     socket.on('connect', () => {
-    console.log('Connected to server');
-    if (socket.user && socket.user.username) {
-        usernameEl.textContent = socket.user.username;
-    } else {
-        usernameEl.textContent = socket.username || 'Guest';
-    }
-});
+        console.log('Connected to server successfully');
+        // Статус будет обновлен когда придет событие 'user-connected'
+    });
 
-socket.on('connect_error', (error) => {
-    console.error('Connection error:', error);
-    if (error.message === 'Unauthorized') {
-        localStorage.removeItem('authToken');
-        window.location.href = '/auth.html';
-    }
-});
+    // Обработка ошибок подключения (объединенный обработчик)
+    socket.on('connect_error', (error) => {
+        console.error('Connection error:', error);
+        if (error.message === 'Unauthorized' || error.message.includes('Invalid') || error.message.includes('unauthorized')) {
+            console.log('Token invalid, redirecting to login');
+            localStorage.removeItem('authToken');
+            window.location.href = '/auth.html';
+            return;
+        }
+        
+        // Для других ошибок не показываем alert, только логируем
+        console.error('Connection failed:', error.message);
+    });
 
-socket.on('user-connected', (data) => {
-    currentUserId = data.userId;
-    usernameEl.textContent = data.username;
-    console.log('User connected:', data);
-});
+    socket.on('user-connected', (data) => {
+        currentUserId = data.userId;
+        if (usernameEl && data.username) {
+            usernameEl.textContent = data.username;
+        }
+        // Сбрасываем счетчик при успешном подключении
+        reconnectAttempts = 0;
+        console.log('User connected:', data);
+    });
+    
+    socket.on('disconnect', (reason) => {
+        console.warn('Disconnected:', reason);
+        
+        // Если сервер отключил из-за ошибки авторизации - не переподключаемся
+        if (reason === 'io server disconnect') {
+            const authToken = localStorage.getItem('authToken');
+            if (!authToken) {
+                console.log('No auth token, redirecting to login');
+                window.location.href = '/auth.html';
+                return;
+            }
+            
+            // Проверяем количество попыток
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                console.log('Max reconnection attempts reached, redirecting to login');
+                localStorage.removeItem('authToken');
+                window.location.href = '/auth.html';
+                return;
+            }
+            
+            reconnectAttempts++;
+            console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
+            
+            setTimeout(() => {
+                if (socket.disconnected) {
+                    socket.connect();
+                }
+            }, 2000);
+        } else {
+            // Сбрасываем счетчик для других типов отключений
+            reconnectAttempts = 0;
+        }
+    });
 
-// Обработка ошибок подключения
-socket.on('connect_error', (error) => {
-    console.error('Connection error:', error);
-    alert('Ошибка подключения к серверу. Проверьте URL сервера в config.js');
-});
-
-socket.on('disconnect', (reason) => {
-    console.warn('Disconnected:', reason);
-    if (reason === 'io server disconnect') {
-        // Сервер принудительно отключил, нужно переподключиться вручную
-        socket.connect();
-    }
-});
-
-socket.on('reconnect', (attemptNumber) => {
-    console.log('Reconnected after', attemptNumber, 'attempts');
-    // Переприсоединяемся к комнате если была выбрана
-    if (currentRoom) {
-        socket.emit('join-room', currentRoom);
-    }
-});
+    socket.on('reconnect', (attemptNumber) => {
+        console.log('Reconnected after', attemptNumber, 'attempts');
+        reconnectAttempts = 0; // Сбрасываем счетчик при успешном переподключении
+        
+        // Переприсоединяемся к комнате если была выбрана
+        if (currentRoom) {
+            socket.emit('join-room', currentRoom);
+        }
+    });
 
 // Получение списка комнат
 socket.on('rooms-list', (rooms) => {
@@ -294,6 +333,8 @@ socket.on('user-left', (data) => {
 
 // Глобальная переменная для socket (будет установлена при инициализации)
 let socket = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
 // Вспомогательные функции
 
