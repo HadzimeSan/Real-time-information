@@ -27,27 +27,9 @@ if (error) {
 // Обработка клика по OAuth кнопкам с проверкой ошибок
 document.querySelectorAll('.oauth-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-        const href = btn.getAttribute('href');
-        if (!href) return;
-        
-        // Пробуем проверить доступность перед редиректом
-        try {
-            const response = await fetch(href, { 
-                method: 'HEAD',
-                redirect: 'manual'
-            });
-            
-            if (response.status === 503) {
-                e.preventDefault();
-                const provider = btn.classList.contains('google') ? 'Google' :
-                               btn.classList.contains('github') ? 'GitHub' :
-                               btn.classList.contains('facebook') ? 'Facebook' : 'OAuth';
-                showError(`${provider} OAuth не настроен. Обратитесь к администратору или используйте другой метод входа.`);
-            }
-        } catch (error) {
-            // Если проверка не удалась, разрешаем переход (пользователь увидит ошибку на сервере)
-            console.log('Could not pre-check OAuth:', error);
-        }
+        // Не блокируем клик - позволяем стандартному поведению ссылки
+        // Если OAuth не настроен, сервер вернет ошибку, которую мы обработаем
+        // Если настроен - произойдет нормальный редирект
     });
 });
 
@@ -244,7 +226,7 @@ async function checkAuth() {
     }
 }
 
-// Скрываем OAuth кнопки если провайдеры не настроены
+// Проверяем OAuth провайдеры (но не скрываем кнопки, если проверка не удалась)
 async function checkOAuthProviders() {
     const providers = ['google', 'github', 'facebook'];
     
@@ -252,29 +234,34 @@ async function checkOAuthProviders() {
         const btn = document.querySelector(`.oauth-btn.${provider}`);
         if (!btn) continue;
         
-            try {
-                const response = await fetch(`/auth/${provider}`, { 
-                    method: 'GET',
-                    redirect: 'manual' // Не следовать редиректам
-                });
-            
-                // Если статус 503 (не настроен) или другой ошибки, скрываем кнопку
-                if (response.status === 503) {
-                    btn.style.display = 'none';
-                    console.log(`${provider} OAuth not configured`);
-                } else if (response.status >= 400 && response.status !== 302) {
-                    // Если это не редирект (302), то ошибка
-                    const data = await response.json().catch(() => ({}));
+        try {
+            const response = await fetch(`/auth/${provider}`, { 
+                method: 'GET',
+                redirect: 'manual' // Не следовать редиректам
+            });
+        
+            // Скрываем кнопку только если точно получили 503 статус
+            if (response.status === 503) {
+                try {
+                    const data = await response.json();
                     if (data.error && data.error.includes('not configured')) {
                         btn.style.display = 'none';
-                        console.log(`${provider} OAuth not configured`);
+                        console.log(`${provider} OAuth not configured - hiding button`);
                     }
+                } catch {
+                    // Если не удалось распарсить JSON, но статус 503 - скрываем
+                    btn.style.display = 'none';
+                    console.log(`${provider} OAuth returned 503 - hiding button`);
                 }
-            } catch (error) {
-                // Если запрос не удался (например, CORS), оставляем кнопку видимой
-                // Пользователь увидит ошибку при клике
-                console.log(`Could not check ${provider} OAuth status:`, error.message);
+            } else if (response.status === 302 || response.status === 307 || response.status === 308) {
+                // Редирект означает, что OAuth настроен - кнопка должна быть видима
+                console.log(`${provider} OAuth is configured`);
             }
+        } catch (error) {
+            // При ошибке сети/CORS оставляем кнопку видимой
+            // Возможно OAuth настроен, но проверка не прошла из-за CORS
+            console.log(`Could not check ${provider} OAuth status, leaving button visible:`, error.message);
+        }
     }
 }
 
@@ -283,8 +270,12 @@ checkAuth().then(isAuth => {
     if (isAuth) {
         window.location.href = '/';
     } else {
-        // Проверяем доступность OAuth провайдеров
-        checkOAuthProviders();
+        // Проверяем доступность OAuth провайдеров (но не скрываем кнопки агрессивно)
+        // Кнопки будут скрыты только если точно известно, что OAuth не настроен
+        setTimeout(() => {
+            checkOAuthProviders();
+        }, 500); // Небольшая задержка, чтобы не блокировать рендеринг
     }
 });
+
 
