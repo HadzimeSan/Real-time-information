@@ -146,12 +146,21 @@ router.post('/register', async (req, res) => {
         
         // Для Resend используем тестовый email если домен не настроен
         // Gmail адреса не работают без верификации домена
+        // В бесплатном плане Resend тестовые emails можно отправлять только на адрес регистрации
         let fromEmail = 'onboarding@resend.dev'; // По умолчанию тестовый email
         
         // Проверяем, не является ли SMTP_USER Gmail адресом
         if (process.env.SMTP_USER && !process.env.SMTP_USER.includes('@gmail.com') && !process.env.SMTP_USER.includes('@resend.dev')) {
           // Если это не Gmail и не тестовый Resend email, используем его (предполагаем, что домен настроен)
           fromEmail = process.env.SMTP_USER;
+        }
+        
+        // В бесплатном плане Resend: тестовые emails можно отправлять только на email регистрации
+        // Предупреждаем пользователя, если отправляем на другой адрес
+        const resendRegisteredEmail = process.env.RESEND_REGISTERED_EMAIL || 'p.h.4@mail.ru';
+        if (fromEmail === 'onboarding@resend.dev' && email !== resendRegisteredEmail) {
+          console.warn(`⚠️ ВНИМАНИЕ: Resend бесплатный план позволяет отправлять тестовые emails только на ${resendRegisteredEmail}`);
+          console.warn(`⚠️ Письмо может не дойти до ${email}. Для отправки на любой адрес верифицируйте домен в Resend.`);
         }
         
         const postData = JSON.stringify({
