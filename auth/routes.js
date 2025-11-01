@@ -21,16 +21,40 @@ const {
 const { readUsers } = authModule;
 const nodemailer = require('nodemailer');
 
-// Настройка nodemailer для отправки magic links
+// Настройка nodemailer для отправки email
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 587,
-  secure: false,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true', // для порта 465
   auth: {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || ''
+  },
+  // Дополнительные опции для лучшей совместимости
+  tls: {
+    rejectUnauthorized: false // для самоподписанных сертификатов
   }
 });
+
+// Проверка соединения с SMTP при старте
+if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error('SMTP соединение не удалось:', error);
+      console.error('Проверьте настройки SMTP в переменных окружения:');
+      console.error('- SMTP_HOST:', process.env.SMTP_HOST || 'smtp.gmail.com');
+      console.error('- SMTP_PORT:', process.env.SMTP_PORT || '587');
+      console.error('- SMTP_USER:', process.env.SMTP_USER ? 'установлен' : 'НЕ УСТАНОВЛЕН');
+      console.error('- SMTP_PASS:', process.env.SMTP_PASS ? 'установлен' : 'НЕ УСТАНОВЛЕН');
+    } else {
+      console.log('SMTP соединение успешно установлено');
+      console.log('SMTP настроен для отправки email на:', process.env.SMTP_USER);
+    }
+  });
+} else {
+  console.warn('SMTP не настроен: SMTP_USER или SMTP_PASS отсутствуют');
+  console.warn('Для работы регистрации с подтверждением email необходимо настроить SMTP');
+}
 
 // Регистрация - отправка кода подтверждения на email
 router.post('/register', async (req, res) => {
@@ -51,9 +75,23 @@ router.post('/register', async (req, res) => {
     // Генерируем и отправляем код подтверждения
     const code = await createEmailVerificationCode(email, password, username);
     
+    // Проверяем наличие SMTP настроек
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.error('SMTP не настроен: SMTP_USER или SMTP_PASS отсутствуют');
+      return res.status(500).json({ 
+        error: 'Email не может быть отправлен: SMTP не настроен. Обратитесь к администратору.',
+        // Для разработки возвращаем код даже если SMTP не настроен
+        development: process.env.NODE_ENV !== 'production' ? { 
+          verificationCode: code,
+          message: 'SMTP не настроен, но код показан для разработки'
+        } : undefined
+      });
+    }
+    
     // Отправляем email с кодом
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await transporter.sendMail({
+    try {
+      console.log(`Отправка кода подтверждения на ${email}...`);
+      const mailInfo = await transporter.sendMail({
         from: process.env.SMTP_USER,
         to: email,
         subject: 'Код подтверждения регистрации - ChatApp',
@@ -65,6 +103,26 @@ router.post('/register', async (req, res) => {
           <p>Код действителен в течение 15 минут.</p>
           <p>Если вы не запрашивали регистрацию, просто проигнорируйте это письмо.</p>
         `
+      });
+      console.log(`Email успешно отправлен:`, mailInfo.messageId);
+    } catch (emailError) {
+      console.error('Ошибка отправки email:', emailError);
+      console.error('Детали ошибки:', {
+        message: emailError.message,
+        code: emailError.code,
+        command: emailError.command,
+        response: emailError.response,
+        responseCode: emailError.responseCode
+      });
+      
+      return res.status(500).json({ 
+        error: 'Не удалось отправить email. Проверьте настройки SMTP или попробуйте позже.',
+        details: process.env.NODE_ENV !== 'production' ? emailError.message : undefined,
+        // Для разработки возвращаем код даже при ошибке отправки
+        development: process.env.NODE_ENV !== 'production' ? { 
+          verificationCode: code,
+          emailError: emailError.message
+        } : undefined
       });
     }
     
