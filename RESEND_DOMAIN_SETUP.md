@@ -51,10 +51,58 @@
 3. Нажмите **Добавить** для каждой записи
 4. Введите данные из Resend
 
-#### Если домен на Namecheap:
-1. Зайдите на https://namecheap.com
-2. Domain List → **Advanced DNS**
-3. Добавьте записи через **Add New Record**
+#### Если домен на Namecheap (подробная инструкция):
+
+1. **Найдите домен в списке:**
+   - На странице Domain List найдите ваш домен `hazime.hategmail.com`
+   - Нажмите на кнопку **"Manage"** справа от домена (или просто кликните на домен)
+
+2. **Перейдите в Advanced DNS:**
+   - В меню сверху найдите вкладку **"Advanced DNS"**
+   - Откройте её
+
+3. **Найдите раздел "Host Records":**
+   - Прокрутите вниз до раздела **"Host Records"**
+   - Там будет таблица с существующими DNS записями
+
+4. **Добавьте DNS записи из Resend:**
+   - В таблице "Domain Verification (DKIM)" из Resend скопируйте:
+     - **Type:** TXT
+     - **Host:** `resend._domainkey` (или полностью как в Resend)
+     - **Value:** длинная строка начинающаяся с `p=MIGfMA0GCSqGSIb3DQEB...`
+   - В Namecheap нажмите **"Add New Record"**
+   - Выберите тип **TXT**
+   - В поле **Host** введите: `resend._domainkey` (без домена, только эту часть!)
+   - В поле **Value** вставьте скопированное содержимое
+   - Нажмите галочку (✓) для сохранения
+
+5. **Добавьте MX запись:**
+   - Из таблицы "Sending" в Resend скопируйте MX запись:
+     - **Type:** MX
+     - **Host:** `send` (или `send.hazime`)
+     - **Value:** `feedback-smtp.eu-west-1.amazonses.com` (или похожее)
+     - **Priority:** 10
+   - В Namecheap нажмите **"Add New Record"**
+   - Выберите тип **MX Record**
+   - В поле **Host** введите: `send`
+   - В поле **Value** введите: содержимое из Resend (например: `feedback-smtp.eu-west-1.amazonses.com`)
+   - В поле **Priority** введите: `10`
+   - Нажмите галочку (✓)
+
+6. **Добавьте TXT запись для SPF:**
+   - Из таблицы "Sending" в Resend скопируйте TXT запись:
+     - **Type:** TXT
+     - **Host:** `send` (или `send.hazime`)
+     - **Value:** `v=spf1 include:amazonses.com ~all` (или похожее)
+   - В Namecheap нажмите **"Add New Record"**
+   - Выберите тип **TXT**
+   - В поле **Host** введите: `send`
+   - В поле **Value** введите: содержимое из Resend
+   - Нажмите галочку (✓)
+
+7. **Сохраните изменения:**
+   - Убедитесь, что все записи добавлены
+   - Namecheap автоматически сохраняет изменения при добавлении записи
 
 #### Если домен на другом регистраторе:
 - Найдите раздел "DNS Settings" или "DNS Management"
