@@ -395,12 +395,12 @@ function addRoomToList(roomId) {
     li.textContent = `# ${roomId}`;
     li.addEventListener('click', () => {
         console.log(`Clicked on room: ${roomId}`);
-        if (socket && socket.connected) {
-            console.log(`Emitting join-room for: ${roomId}`);
+        if (socket) {
+            console.log(`Emitting join-room for: ${roomId}, socket connected: ${socket.connected}`);
             socket.emit('join-room', roomId);
         } else {
-            console.error('Socket not connected, cannot join room');
-            alert('Не удалось подключиться к серверу. Обновите страницу.');
+            console.error('Socket not initialized, cannot join room');
+            alert('Подключение не установлено. Обновите страницу.');
         }
     });
     roomsList.appendChild(li);
@@ -422,10 +422,16 @@ function sendMessage() {
         return;
     }
     
-    if (!socket || !socket.connected) {
-        console.error('Socket not initialized or not connected. Socket:', socket, 'Connected:', socket?.connected);
-        alert('Не удалось подключиться к серверу. Обновите страницу.');
+    if (!socket) {
+        console.error('Socket not initialized');
+        alert('Подключение не установлено. Обновите страницу.');
         return;
+    }
+    
+    // Проверяем подключение только для информационных целей
+    if (!socket.connected) {
+        console.warn('Socket not connected, but attempting to send anyway. Connected:', socket.connected);
+        // Не блокируем отправку - Socket.io автоматически переподключится
     }
     
     console.log('Sending message:', { text, room: currentRoom });

@@ -145,6 +145,12 @@ io.on('connection', (socket) => {
       rooms.set(roomId, { users: new Set(), content: '', cursors: new Map(), messages: [] });
     }
 
+    const room = rooms.get(roomId);
+    if (!room) {
+      console.error(`Failed to get room ${roomId} after creation`);
+      return;
+    }
+
     let user = users.get(socket.id);
     
     // Если пользователь не найден, пытаемся его восстановить
