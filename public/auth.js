@@ -194,15 +194,29 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
             const devCode = document.getElementById('devCode');
             
             if (devCodeDisplay) {
-                devCodeDisplay.style.display = 'block';
+                // Принудительно показываем элемент с !important
+                devCodeDisplay.style.setProperty('display', 'block', 'important');
+                devCodeDisplay.style.setProperty('visibility', 'visible', 'important');
+                devCodeDisplay.style.setProperty('opacity', '1', 'important');
                 console.log('✅ devCodeDisplay показан');
+                console.log('✅ Проверка стилей:', {
+                    display: window.getComputedStyle(devCodeDisplay).display,
+                    visibility: window.getComputedStyle(devCodeDisplay).visibility,
+                    opacity: window.getComputedStyle(devCodeDisplay).opacity
+                });
             } else {
                 console.error('❌ devCodeDisplay не найден!');
             }
             
             if (devCode) {
                 devCode.textContent = data.development.verificationCode;
+                // Убеждаемся, что код виден
+                devCode.style.setProperty('color', '#856404', 'important');
+                devCode.style.setProperty('font-size', '18px', 'important');
+                devCode.style.setProperty('font-weight', 'bold', 'important');
                 console.log('✅ devCode установлен:', data.development.verificationCode);
+                console.log('✅ Содержимое элемента:', devCode.textContent);
+                console.log('✅ Родительский элемент виден?', devCodeDisplay ? window.getComputedStyle(devCodeDisplay).display !== 'none' : 'N/A');
             } else {
                 console.error('❌ devCode не найден!');
             }
@@ -326,10 +340,15 @@ document.getElementById('resendCodeBtn').addEventListener('click', async () => {
                     const devCodeDisplay = document.getElementById('devCodeDisplay');
                     const devCode = document.getElementById('devCode');
                     if (devCodeDisplay) {
-                        devCodeDisplay.style.display = 'block';
+                        devCodeDisplay.style.setProperty('display', 'block', 'important');
+                        devCodeDisplay.style.setProperty('visibility', 'visible', 'important');
+                        devCodeDisplay.style.setProperty('opacity', '1', 'important');
                     }
                     if (devCode) {
                         devCode.textContent = errorData.development.verificationCode;
+                        devCode.style.setProperty('color', '#856404', 'important');
+                        devCode.style.setProperty('font-size', '18px', 'important');
+                        devCode.style.setProperty('font-weight', 'bold', 'important');
                     }
                     showMessage(errorData.development.message || 'SMTP не настроен, но код показан для разработки', 'info');
                     return;
