@@ -190,7 +190,7 @@ router.post('/register', async (req, res) => {
     }
     
     // Возвращаем ответ с кодом
-    // Всегда возвращаем код в development поле для удобства тестирования
+    // ВСЕГДА возвращаем код в development поле для удобства тестирования
     let emailStatusMessage = 'Код также отправлен на email. Проверьте почту или используйте код ниже.';
     
     if (emailError) {
@@ -199,17 +199,27 @@ router.post('/register', async (req, res) => {
       emailStatusMessage = 'Отправка email в процессе. Проверьте почту или используйте код ниже.';
     }
     
-    res.json({
+    const responseData = {
       success: true,
       message: 'Код подтверждения отправлен на ваш email',
-      // Код всегда возвращается для отображения на странице (для тестирования)
+      // Код ВСЕГДА возвращается для отображения на странице
       development: { 
         verificationCode: code,
         message: emailStatusMessage,
         emailSent: emailSent,
         emailError: emailError ? emailError.message : null
       }
-    });
+    };
+    
+    console.log('📤 Отправка ответа клиенту:', JSON.stringify({
+      success: responseData.success,
+      message: responseData.message,
+      hasDevelopment: !!responseData.development,
+      hasCode: !!responseData.development.verificationCode,
+      code: responseData.development.verificationCode
+    }));
+    
+    res.json(responseData);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

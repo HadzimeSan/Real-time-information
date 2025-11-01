@@ -174,21 +174,37 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         
         const data = await response.json();
         
+        // Отладочная информация
+        console.log('📧 Ответ сервера:', data);
+        console.log('📧 Development код:', data.development);
+        
         // Показываем поле для ввода кода
         const verificationCodeSection = document.getElementById('verificationCodeSection');
         if (verificationCodeSection) {
             verificationCodeSection.style.display = 'block';
+            console.log('✅ verificationCodeSection показан');
+        } else {
+            console.error('❌ verificationCodeSection не найден!');
         }
         
         // Показываем код для разработки (если есть)
         if (data.development && data.development.verificationCode) {
+            console.log('✅ Код получен:', data.development.verificationCode);
             const devCodeDisplay = document.getElementById('devCodeDisplay');
             const devCode = document.getElementById('devCode');
+            
             if (devCodeDisplay) {
                 devCodeDisplay.style.display = 'block';
+                console.log('✅ devCodeDisplay показан');
+            } else {
+                console.error('❌ devCodeDisplay не найден!');
             }
+            
             if (devCode) {
                 devCode.textContent = data.development.verificationCode;
+                console.log('✅ devCode установлен:', data.development.verificationCode);
+            } else {
+                console.error('❌ devCode не найден!');
             }
             
             // Показываем дополнительное сообщение, если есть
@@ -198,6 +214,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                 showMessage('Код подтверждения отправлен на ваш email!', 'success');
             }
         } else {
+            console.warn('⚠️ Код не получен в ответе!');
+            console.warn('data.development:', data.development);
             showMessage('Код подтверждения отправлен на ваш email!', 'success');
         }
         
