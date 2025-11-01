@@ -119,18 +119,47 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     btn.disabled = true;
     btn.textContent = 'Отправка...';
     
+    // Создаем контроллер для отмены запроса
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 секунд таймаут
+    
     try {
         const response = await fetch('/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, username, password })
+            body: JSON.stringify({ email, username, password }),
+            signal: controller.signal
         });
         
-        const data = await response.json();
+        clearTimeout(timeoutId);
         
+        // Проверяем статус ответа
         if (!response.ok) {
-            throw new Error(data.error || 'Ошибка отправки кода');
+            let errorMessage = 'Ошибка отправки кода';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+                
+                // Если SMTP не настроен, показываем код для разработки
+                if (errorData.development && errorData.development.verificationCode) {
+                    // Показываем поле для ввода кода даже при ошибке (для разработки)
+                    document.getElementById('verificationCodeSection').style.display = 'block';
+                    document.getElementById('devCodeDisplay').style.display = 'block';
+                    document.getElementById('devCode').textContent = errorData.development.verificationCode;
+                    document.getElementById('registerForm').style.display = 'none';
+                    
+                    showMessage('SMTP не настроен, но код показан для разработки', 'info');
+                    return; // Выходим, не показывая ошибку
+                }
+            } catch (parseError) {
+                // Если не удалось распарсить JSON, используем текст ответа
+                const text = await response.text();
+                errorMessage = text || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
+        
+        const data = await response.json();
         
         // Показываем поле для ввода кода
         document.getElementById('verificationCodeSection').style.display = 'block';
@@ -146,7 +175,16 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         
         showMessage('Код подтверждения отправлен на ваш email!', 'success');
     } catch (error) {
-        showError(error.message);
+        clearTimeout(timeoutId);
+        
+        if (error.name === 'AbortError') {
+            showError('Превышено время ожидания ответа. Проверьте соединение с сервером.');
+        } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            showError('Не удалось подключиться к серверу. Проверьте интернет-соединение.');
+        } else {
+            showError(error.message || 'Ошибка отправки кода');
+        }
+        console.error('Ошибка регистрации:', error);
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -214,18 +252,40 @@ document.getElementById('resendCodeBtn').addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = 'Отправка...';
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
     try {
         const response = await fetch('/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(registrationData)
+            body: JSON.stringify(registrationData),
+            signal: controller.signal
         });
         
-        const data = await response.json();
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
-            throw new Error(data.error || 'Ошибка отправки кода');
+            let errorMessage = 'Ошибка отправки кода';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+                
+                // Если SMTP не настроен, показываем код для разработки
+                if (errorData.development && errorData.development.verificationCode) {
+                    document.getElementById('devCodeDisplay').style.display = 'block';
+                    document.getElementById('devCode').textContent = errorData.development.verificationCode;
+                    showMessage('SMTP не настроен, но код показан для разработки', 'info');
+                    return;
+                }
+            } catch (parseError) {
+                const text = await response.text();
+                errorMessage = text || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
+        
+        const data = await response.json();
         
         // Обновляем отображение кода для разработки (если есть)
         if (data.development && data.development.verificationCode) {
@@ -235,7 +295,16 @@ document.getElementById('resendCodeBtn').addEventListener('click', async () => {
         
         showMessage('Новый код подтверждения отправлен на ваш email!', 'success');
     } catch (error) {
-        showError(error.message);
+        clearTimeout(timeoutId);
+        
+        if (error.name === 'AbortError') {
+            showError('Превышено время ожидания ответа. Проверьте соединение с сервером.');
+        } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            showError('Не удалось подключиться к серверу. Проверьте интернет-соединение.');
+        } else {
+            showError(error.message || 'Ошибка отправки кода');
+        }
+        console.error('Ошибка повторной отправки кода:', error);
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;

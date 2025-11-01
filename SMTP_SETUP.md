@@ -145,6 +145,20 @@ SMTP_USER=your-email@yahoo.com
 SMTP_PASS=your-app-password
 ```
 
+### Mail.ru
+```env
+SMTP_HOST=smtp.mail.ru
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@mail.ru
+SMTP_PASS=your-password
+```
+
+**Примечание для Mail.ru:**
+- Используйте обычный пароль от почты
+- В настройках почты Mail.ru включите доступ для приложений (если требуется)
+- Может потребоваться подтверждение через мобильное приложение
+
 ### SendGrid (для продакшена)
 ```env
 SMTP_HOST=smtp.sendgrid.net
