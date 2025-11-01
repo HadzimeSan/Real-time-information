@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const passport = require('./passport-config');
+const authModule = require('./auth');
 const {
   registerUser,
   loginUser,
@@ -11,8 +12,13 @@ const {
   enable2FA,
   verify2FA,
   require2FA,
-  getUserById
-} = require('./auth');
+  getUserById,
+  createEmailVerificationCode,
+  verifyEmailCode
+} = authModule;
+
+// Получаем readUsers из модуля для проверки существующих пользователей
+const { readUsers } = authModule;
 const nodemailer = require('nodemailer');
 
 // Настройка nodemailer для отправки magic links
@@ -26,7 +32,7 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Регистрация
+// Регистрация - отправка кода подтверждения на email
 router.post('/register', async (req, res) => {
   try {
     const { email, password, username } = req.body;
@@ -35,11 +41,63 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
     
-    const user = await registerUser(email, password, username);
+    // Проверяем, не существует ли уже пользователь с таким email
+    const users = await readUsers();
+    const existingUser = users.find(u => u.email === email);
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+    
+    // Генерируем и отправляем код подтверждения
+    const code = await createEmailVerificationCode(email, password, username);
+    
+    // Отправляем email с кодом
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      await transporter.sendMail({
+        from: process.env.SMTP_USER,
+        to: email,
+        subject: 'Код подтверждения регистрации - ChatApp',
+        html: `
+          <h2>Код подтверждения регистрации</h2>
+          <p>Ваш код подтверждения:</p>
+          <h1 style="color: #4CAF50; font-size: 32px; text-align: center; letter-spacing: 5px;">${code}</h1>
+          <p>Введите этот код на странице регистрации для завершения регистрации.</p>
+          <p>Код действителен в течение 15 минут.</p>
+          <p>Если вы не запрашивали регистрацию, просто проигнорируйте это письмо.</p>
+        `
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Код подтверждения отправлен на ваш email',
+      // Для разработки возвращаем код (в продакшене убрать!)
+      development: process.env.NODE_ENV !== 'production' ? { verificationCode: code } : undefined
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Подтверждение email и создание пользователя
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and code are required' });
+    }
+    
+    // Проверяем код подтверждения
+    const userData = await verifyEmailCode(email, code);
+    
+    // Создаем пользователя
+    const user = await registerUser(userData.email, userData.password, userData.username);
     const token = generateToken(user);
     
     res.json({
       success: true,
+      message: 'Email подтвержден. Регистрация завершена!',
       token,
       user: {
         id: user.id,

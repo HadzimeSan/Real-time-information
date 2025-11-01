@@ -76,8 +76,28 @@
                         <label for="registerPasswordConfirm">Подтвердите пароль</label>
                         <input type="password" id="registerPasswordConfirm" required placeholder="••••••••">
                     </div>
-                    <button type="submit" class="btn-primary">Зарегистрироваться</button>
+                    <button type="submit" class="btn-primary" id="registerSubmitBtn">Отправить код на email</button>
                 </form>
+                
+                <!-- Поле для ввода кода подтверждения (показывается после отправки формы) -->
+                <div id="verificationCodeSection" style="display: none; margin-top: 20px;">
+                    <div class="info-message" style="padding: 15px; background: #e3f2fd; border-radius: 8px; margin-bottom: 20px;">
+                        <p><strong>Код подтверждения отправлен на ваш email!</strong></p>
+                        <p>Проверьте почту и введите 6-значный код подтверждения.</p>
+                        <p id="devCodeDisplay" style="display: none; margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 4px;">
+                            <strong>Для разработки:</strong> <code id="devCode"></code>
+                        </p>
+                    </div>
+                    <form id="verifyEmailForm">
+                        <div class="form-group">
+                            <label for="verificationCode">Код подтверждения</label>
+                            <input type="text" id="verificationCode" required placeholder="000000" maxlength="6" pattern="[0-9]{6}">
+                            <small>Введите 6-значный код из письма</small>
+                        </div>
+                        <button type="submit" class="btn-primary">Подтвердить email</button>
+                        <button type="button" class="btn-secondary" id="resendCodeBtn" style="margin-left: 10px;">Отправить новый код</button>
+                    </form>
+                </div>
             </div>
 
             <!-- Magic Link форма -->

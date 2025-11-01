@@ -89,7 +89,10 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }
 });
 
-// Форма регистрации
+// Сохраняем данные регистрации для повторной отправки кода
+let registrationData = null;
+
+// Форма регистрации - отправка кода на email
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -108,6 +111,14 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         return;
     }
     
+    // Сохраняем данные для возможной повторной отправки
+    registrationData = { email, username, password };
+    
+    const btn = document.getElementById('registerSubmitBtn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Отправка...';
+    
     try {
         const response = await fetch('/auth/register', {
             method: 'POST',
@@ -118,14 +129,116 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         const data = await response.json();
         
         if (!response.ok) {
-            throw new Error(data.error || 'Ошибка регистрации');
+            throw new Error(data.error || 'Ошибка отправки кода');
+        }
+        
+        // Показываем поле для ввода кода
+        document.getElementById('verificationCodeSection').style.display = 'block';
+        
+        // Показываем код для разработки (если есть)
+        if (data.development && data.development.verificationCode) {
+            document.getElementById('devCodeDisplay').style.display = 'block';
+            document.getElementById('devCode').textContent = data.development.verificationCode;
+        }
+        
+        // Скрываем форму регистрации
+        document.getElementById('registerForm').style.display = 'none';
+        
+        showMessage('Код подтверждения отправлен на ваш email!', 'success');
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+});
+
+// Форма подтверждения email
+document.getElementById('verifyEmailForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    if (!registrationData) {
+        showError('Ошибка: данные регистрации не найдены');
+        return;
+    }
+    
+    const code = document.getElementById('verificationCode').value;
+    
+    if (!code || code.length !== 6) {
+        showError('Введите 6-значный код подтверждения');
+        return;
+    }
+    
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Подтверждение...';
+    
+    try {
+        const response = await fetch('/auth/verify-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: registrationData.email, code })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Ошибка подтверждения email');
         }
         
         // Сохраняем токен и перенаправляем
         localStorage.setItem('authToken', data.token);
-        window.location.href = '/';
+        showMessage('Email подтвержден! Регистрация завершена!', 'success');
+        
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1000);
     } catch (error) {
         showError(error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+});
+
+// Повторная отправка кода
+document.getElementById('resendCodeBtn').addEventListener('click', async () => {
+    if (!registrationData) {
+        showError('Ошибка: данные регистрации не найдены');
+        return;
+    }
+    
+    const btn = document.getElementById('resendCodeBtn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Отправка...';
+    
+    try {
+        const response = await fetch('/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(registrationData)
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Ошибка отправки кода');
+        }
+        
+        // Обновляем отображение кода для разработки (если есть)
+        if (data.development && data.development.verificationCode) {
+            document.getElementById('devCodeDisplay').style.display = 'block';
+            document.getElementById('devCode').textContent = data.development.verificationCode;
+        }
+        
+        showMessage('Новый код подтверждения отправлен на ваш email!', 'success');
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
     }
 });
 
