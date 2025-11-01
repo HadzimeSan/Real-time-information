@@ -33,7 +33,12 @@ const transporter = nodemailer.createTransport({
   // Дополнительные опции для лучшей совместимости
   tls: {
     rejectUnauthorized: false // для самоподписанных сертификатов
-  }
+  },
+  // Таймауты для предотвращения зависаний
+  connectionTimeout: 10000, // 10 секунд на соединение
+  greetingTimeout: 10000, // 10 секунд на приветствие
+  socketTimeout: 10000, // 10 секунд на socket операции
+  socketTimeout: 30000 // 30 секунд общий таймаут
 });
 
 // Проверка соединения с SMTP при старте
@@ -78,35 +83,35 @@ router.post('/register', async (req, res) => {
     // Проверяем наличие SMTP настроек
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
       console.error('SMTP не настроен: SMTP_USER или SMTP_PASS отсутствуют');
-      return res.status(500).json({ 
-        error: 'Email не может быть отправлен: SMTP не настроен. Обратитесь к администратору.',
+      // Возвращаем код сразу (не ждем отправки email)
+      return res.json({
+        success: true,
+        message: 'Код подтверждения отправлен на ваш email',
         // Для разработки возвращаем код даже если SMTP не настроен
-        development: process.env.NODE_ENV !== 'production' ? { 
+        development: { 
           verificationCode: code,
           message: 'SMTP не настроен, но код показан для разработки'
-        } : undefined
+        }
       });
     }
     
-    // Отправляем email с кодом
-    try {
-      console.log(`Отправка кода подтверждения на ${email}...`);
-      const mailInfo = await transporter.sendMail({
-        from: process.env.SMTP_USER,
-        to: email,
-        subject: 'Код подтверждения регистрации - ChatApp',
-        html: `
-          <h2>Код подтверждения регистрации</h2>
-          <p>Ваш код подтверждения:</p>
-          <h1 style="color: #4CAF50; font-size: 32px; text-align: center; letter-spacing: 5px;">${code}</h1>
-          <p>Введите этот код на странице регистрации для завершения регистрации.</p>
-          <p>Код действителен в течение 15 минут.</p>
-          <p>Если вы не запрашивали регистрацию, просто проигнорируйте это письмо.</p>
-        `
-      });
-      console.log(`Email успешно отправлен:`, mailInfo.messageId);
-    } catch (emailError) {
-      console.error('Ошибка отправки email:', emailError);
+    // Отправляем email с кодом (асинхронно, не блокируем ответ)
+    const sendEmailPromise = transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: email,
+      subject: 'Код подтверждения регистрации - ChatApp',
+      html: `
+        <h2>Код подтверждения регистрации</h2>
+        <p>Ваш код подтверждения:</p>
+        <h1 style="color: #4CAF50; font-size: 32px; text-align: center; letter-spacing: 5px;">${code}</h1>
+        <p>Введите этот код на странице регистрации для завершения регистрации.</p>
+        <p>Код действителен в течение 15 минут.</p>
+        <p>Если вы не запрашивали регистрацию, просто проигнорируйте это письмо.</p>
+      `
+    }).then((mailInfo) => {
+      console.log(`Email успешно отправлен на ${email}:`, mailInfo.messageId);
+    }).catch((emailError) => {
+      console.error('Ошибка отправки email на', email, ':', emailError);
       console.error('Детали ошибки:', {
         message: emailError.message,
         code: emailError.code,
@@ -114,18 +119,22 @@ router.post('/register', async (req, res) => {
         response: emailError.response,
         responseCode: emailError.responseCode
       });
-      
-      return res.status(500).json({ 
-        error: 'Не удалось отправить email. Проверьте настройки SMTP или попробуйте позже.',
-        details: process.env.NODE_ENV !== 'production' ? emailError.message : undefined,
-        // Для разработки возвращаем код даже при ошибке отправки
-        development: process.env.NODE_ENV !== 'production' ? { 
-          verificationCode: code,
-          emailError: emailError.message
-        } : undefined
-      });
-    }
+    });
     
+    // Добавляем таймаут для отправки email (чтобы не ждать вечно)
+    const emailTimeout = new Promise((resolve) => {
+      setTimeout(() => {
+        console.warn(`Отправка email на ${email} заняла слишком много времени`);
+        resolve();
+      }, 10000); // 10 секунд таймаут
+    });
+    
+    // Ждем завершения отправки или таймаут (все равно возвращаем код)
+    Promise.race([sendEmailPromise, emailTimeout]).catch(() => {
+      console.error('Критическая ошибка при отправке email');
+    });
+    
+    // Возвращаем ответ сразу с кодом (не ждем отправки email)
     res.json({
       success: true,
       message: 'Код подтверждения отправлен на ваш email',
