@@ -134,11 +134,19 @@ router.post('/register', async (req, res) => {
     });
     
     // Возвращаем ответ сразу с кодом (не ждем отправки email)
+    // Всегда возвращаем код в development поле для удобства тестирования
+    
+    // (код показывается только на странице регистрации)
     res.json({
       success: true,
       message: 'Код подтверждения отправлен на ваш email',
-      // Для разработки возвращаем код (в продакшене убрать!)
-      development: process.env.NODE_ENV !== 'production' ? { verificationCode: code } : undefined
+      // Код всегда возвращается для отображения на странице (для тестирования)
+      development: { 
+        verificationCode: code,
+        message: process.env.SMTP_USER && process.env.SMTP_PASS 
+          ? 'Код также отправлен на email. Проверьте почту или используйте код ниже.'
+          : 'SMTP не настроен. Используйте код ниже для завершения регистрации.'
+      }
     });
   } catch (error) {
     res.status(400).json({ error: error.message });

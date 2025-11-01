@@ -168,12 +168,20 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         if (data.development && data.development.verificationCode) {
             document.getElementById('devCodeDisplay').style.display = 'block';
             document.getElementById('devCode').textContent = data.development.verificationCode;
+            
+            
+            // Показываем дополнительное сообщение, если есть
+            if (data.development.message) {
+                showMessage(data.development.message, 'info');
+            } else {
+                showMessage('Код подтверждения отправлен на ваш email!', 'success');
+            }
+        } else {
+            showMessage('Код подтверждения отправлен на ваш email!', 'success');
         }
         
         // Скрываем форму регистрации
         document.getElementById('registerForm').style.display = 'none';
-        
-        showMessage('Код подтверждения отправлен на ваш email!', 'success');
     } catch (error) {
         clearTimeout(timeoutId);
         
