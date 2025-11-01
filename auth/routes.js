@@ -144,7 +144,7 @@ router.post('/register', async (req, res) => {
       try {
         console.log('📧 Попытка отправить email через Resend API...');
         const postData = JSON.stringify({
-          from: `ChatApp <${process.env.SMTP_USER || 'noreply@resend.dev'}>`,
+          from: `ChatApp <${process.env.SMTP_USER || 'onboarding@resend.dev'}>`,
           to: email,
           subject: 'Код подтверждения регистрации - ChatApp',
           html: `
