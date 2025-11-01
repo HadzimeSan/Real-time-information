@@ -257,8 +257,35 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                     scrollHeight: devCodeDisplay.scrollHeight,
                     scrollWidth: devCodeDisplay.scrollWidth
                 });
+                
+                // Если элемент имеет нулевые размеры, создаем альтернативное отображение
+                if (devCodeDisplay.offsetHeight === 0 || devCodeDisplay.offsetWidth === 0) {
+                    console.warn('⚠️ Элемент имеет нулевые размеры, создаем альтернативное отображение');
+                    // Находим родительский info-message и добавляем код туда
+                    const infoMessage = devCodeDisplay.closest('.info-message') || devCodeDisplay.parentElement;
+                    if (infoMessage) {
+                        // Создаем новый видимый элемент для кода
+                        const codeAlert = document.createElement('div');
+                        codeAlert.style.cssText = 'display: block !important; visibility: visible !important; opacity: 1 !important; margin-top: 10px; padding: 15px; background: #fff3cd !important; border: 2px solid #856404 !important; border-radius: 8px !important; font-size: 16px !important; color: #856404 !important; font-weight: bold !important; text-align: center !important; z-index: 10000 !important; position: relative !important;';
+                        codeAlert.innerHTML = `<strong>Код подтверждения:</strong> <code style="font-size: 24px; font-weight: bold; color: #856404; letter-spacing: 3px; margin-left: 10px;">${data.development.verificationCode}</code>`;
+                        infoMessage.appendChild(codeAlert);
+                        console.log('✅ Создано альтернативное отображение кода');
+                    }
+                }
             } else {
                 console.error('❌ devCodeDisplay не найден!');
+                // Создаем элемент с нуля, если он не найден
+                const verificationCodeSection = document.getElementById('verificationCodeSection');
+                if (verificationCodeSection) {
+                    const infoMessage = verificationCodeSection.querySelector('.info-message');
+                    if (infoMessage) {
+                        const codeAlert = document.createElement('div');
+                        codeAlert.style.cssText = 'display: block !important; visibility: visible !important; opacity: 1 !important; margin-top: 10px; padding: 15px; background: #fff3cd !important; border: 2px solid #856404 !important; border-radius: 8px !important; font-size: 16px !important; color: #856404 !important; font-weight: bold !important; text-align: center !important; z-index: 10000 !important; position: relative !important;';
+                        codeAlert.innerHTML = `<strong>Код подтверждения:</strong> <code style="font-size: 24px; font-weight: bold; color: #856404; letter-spacing: 3px; margin-left: 10px;">${data.development.verificationCode}</code>`;
+                        infoMessage.appendChild(codeAlert);
+                        console.log('✅ Создан новый элемент для отображения кода');
+                    }
+                }
             }
             
             if (devCode) {
