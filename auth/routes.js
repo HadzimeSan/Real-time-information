@@ -143,8 +143,19 @@ router.post('/register', async (req, res) => {
     if (process.env.RESEND_API_KEY) {
       try {
         console.log('📧 Попытка отправить email через Resend API...');
+        
+        // Для Resend используем тестовый email если домен не настроен
+        // Gmail адреса не работают без верификации домена
+        let fromEmail = 'onboarding@resend.dev'; // По умолчанию тестовый email
+        
+        // Проверяем, не является ли SMTP_USER Gmail адресом
+        if (process.env.SMTP_USER && !process.env.SMTP_USER.includes('@gmail.com') && !process.env.SMTP_USER.includes('@resend.dev')) {
+          // Если это не Gmail и не тестовый Resend email, используем его (предполагаем, что домен настроен)
+          fromEmail = process.env.SMTP_USER;
+        }
+        
         const postData = JSON.stringify({
-          from: `ChatApp <${process.env.SMTP_USER || 'onboarding@resend.dev'}>`,
+          from: `ChatApp <${fromEmail}>`,
           to: email,
           subject: 'Код подтверждения регистрации - ChatApp',
           html: `
