@@ -101,6 +101,7 @@ io.on('connection', (socket) => {
   console.log(`User connected: ${socket.username} (${socket.userId})`);
 
   // Удаляем старые подключения этого пользователя (если есть)
+  
   // Это предотвращает дублирование при переподключении
   users.forEach((user, socketId) => {
     if (user.id === socket.userId && socketId !== socket.id) {
@@ -131,7 +132,15 @@ io.on('connection', (socket) => {
 
   // Присоединение к комнате
   socket.on('join-room', (roomId) => {
+    console.log(`Socket ${socket.id} (${socket.username}) attempting to join room: ${roomId}`);
+    
+    if (!roomId || typeof roomId !== 'string') {
+      console.error('Invalid roomId:', roomId);
+      return;
+    }
+
     if (!rooms.has(roomId)) {
+      console.log(`Creating new room: ${roomId}`);
       rooms.set(roomId, { users: new Set(), content: '', cursors: new Map(), messages: [] });
     }
 
@@ -143,8 +152,11 @@ io.on('connection', (socket) => {
       return;
     }
 
+    console.log(`User ${user.username} (${user.id}) current room before join: ${user.currentRoom}`);
+
     // Покидаем предыдущую комнату
-    if (user.currentRoom && rooms.has(user.currentRoom)) {
+    if (user.currentRoom && user.currentRoom !== roomId && rooms.has(user.currentRoom)) {
+      console.log(`Leaving previous room: ${user.currentRoom}`);
       leaveRoom(socket, user.currentRoom);
     }
 
@@ -152,6 +164,8 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     room.users.add(socket.id);
     user.currentRoom = roomId;
+
+    console.log(`User ${user.username} joined room ${roomId}. Room has ${room.messages.length} messages`);
 
     // Отправляем историю чата и содержимое документа
     socket.emit('room-joined', {
@@ -174,24 +188,34 @@ io.on('connection', (socket) => {
   });
 
   // Отправка сообщения
-  socket.on('message', (data) => {
+  socket.on('message', (data, callback) => {
+    console.log(`Message received from socket ${socket.id}:`, data);
+    
     const user = users.get(socket.id);
     if (!user) {
       console.error('User not found for socket:', socket.id);
+      if (callback) callback({ error: 'User not found' });
       return;
     }
+    
+    console.log(`User ${user.username} (${user.id}) current room: ${user.currentRoom}`);
+    
     if (!user.currentRoom) {
       console.error('User has no current room:', user.username);
+      if (callback) callback({ error: 'No room selected. Please join a room first.' });
       return;
     }
+    
     if (!data || !data.text || !data.text.trim()) {
       console.error('Empty message text');
+      if (callback) callback({ error: 'Message text is required' });
       return;
     }
 
     const room = rooms.get(user.currentRoom);
     if (!room) {
       console.error('Room not found:', user.currentRoom);
+      if (callback) callback({ error: 'Room not found' });
       return;
     }
 
@@ -213,6 +237,7 @@ io.on('connection', (socket) => {
     }
 
     console.log(`Message sent by ${user.username} in ${user.currentRoom}:`, message.text.substring(0, 50));
+    console.log(`Broadcasting to room ${user.currentRoom}, room has ${room.users.size} users`);
     
     // Отправляем сообщение всем в комнате
     io.to(user.currentRoom).emit('message', message);
