@@ -25,68 +25,72 @@ const nodemailer = require('nodemailer');
 // Обрабатываем пароль: убираем пробелы (Gmail App Password обычно без пробелов)
 const smtpPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : '';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true', // для порта 465
-  auth: {
-    user: process.env.SMTP_USER || '',
-    pass: smtpPass
-  },
-  // Дополнительные опции для лучшей совместимости
-  tls: {
-    rejectUnauthorized: false // для самоподписанных сертификатов
-  },
-  // Увеличенные таймауты для надежности (особенно для Render)
-  connectionTimeout: 30000, // 30 секунд на соединение (было 10)
-  greetingTimeout: 30000, // 30 секунд на приветствие (было 10)
-  socketTimeout: 60000, // 60 секунд общий таймаут (было 30)
-  // Дополнительные опции для стабильности
-  pool: true, // использовать пул соединений
-  maxConnections: 1, // максимум соединений
-  maxMessages: 3, // максимум сообщений на соединение
-  rateDelta: 1000, // интервал между попытками
-  rateLimit: 5 // максимум попыток
-});
-
-// Проверка соединения с SMTP при старте
-if (process.env.SMTP_USER && smtpPass) {
-  console.log('Проверка SMTP соединения...');
-  console.log('SMTP настройки:', {
+// Функция для создания транспортера с разными настройками
+function createTransporter(port, secure) {
+  return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
+    port: port,
+    secure: secure, // true для 465, false для 587
+    auth: {
+      user: process.env.SMTP_USER || '',
+      pass: smtpPass
+    },
+    // Дополнительные опции для лучшей совместимости
+    tls: {
+      rejectUnauthorized: false // для самоподписанных сертификатов
+    },
+    // Увеличенные таймауты для надежности (особенно для Render)
+    connectionTimeout: 30000, // 30 секунд на соединение
+    greetingTimeout: 30000, // 30 секунд на приветствие
+    socketTimeout: 60000, // 60 секунд общий таймаут
+    // Дополнительные опции для стабильности
+    pool: false, // отключаем пул для избежания проблем с переиспользованием соединений
+    // Упрощенные настройки для надежности
+    requireTLS: !secure // требовать TLS для порта 587
+  });
+}
+
+// Создаем транспортер с портом из переменных окружения или пробуем оба порта
+const smtpPort = parseInt(process.env.SMTP_PORT || '465'); // По умолчанию 465 (более надежен на Render)
+const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+
+let transporter = createTransporter(smtpPort, smtpSecure);
+
+// Функция для переключения на альтернативный порт при ошибке
+function switchTransporterPort() {
+  const currentPort = transporter.options.port;
+  const currentSecure = transporter.options.secure;
+  
+  if (currentPort === 465 && !currentSecure) {
+    // Если был 465, пробуем 587
+    console.log('🔄 Переключение на порт 587 с STARTTLS...');
+    transporter = createTransporter(587, false);
+  } else if (currentPort === 587 && !currentSecure) {
+    // Если был 587, пробуем 465
+    console.log('🔄 Переключение на порт 465 с SSL...');
+    transporter = createTransporter(465, true);
+  } else {
+    // Если secure уже true, пробуем 587
+    console.log('🔄 Переключение на порт 587 с STARTTLS...');
+    transporter = createTransporter(587, false);
+  }
+  
+  console.log(`📧 Новые SMTP настройки: port=${transporter.options.port}, secure=${transporter.options.secure}`);
+}
+
+// Проверка соединения с SMTP при старте (отключена - проверяем только при отправке)
+// Некоторые хостинги (например Render) могут блокировать проверку соединения при старте
+if (process.env.SMTP_USER && smtpPass) {
+  console.log('📧 SMTP настройки:', {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: smtpPort,
+    secure: smtpSecure,
     user: process.env.SMTP_USER,
     passLength: smtpPass.length,
     passPreview: smtpPass ? `${smtpPass.substring(0, 4)}...${smtpPass.substring(smtpPass.length - 4)}` : 'не установлен'
   });
-  
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('❌ SMTP соединение не удалось:', error);
-      console.error('Детали ошибки:', {
-        message: error.message,
-        code: error.code,
-        command: error.command,
-        response: error.response,
-        responseCode: error.responseCode,
-        stack: error.stack
-      });
-      console.error('Проверьте настройки SMTP:');
-      console.error('- SMTP_HOST:', process.env.SMTP_HOST || 'smtp.gmail.com');
-      console.error('- SMTP_PORT:', process.env.SMTP_PORT || '587');
-      console.error('- SMTP_SECURE:', process.env.SMTP_SECURE || 'false');
-      console.error('- SMTP_USER:', process.env.SMTP_USER || 'НЕ УСТАНОВЛЕН');
-      console.error('- SMTP_PASS:', smtpPass ? `${smtpPass.length} символов` : 'НЕ УСТАНОВЛЕН');
-      console.error('⚠️  Убедитесь, что:');
-      console.error('  1. Gmail App Password правильный (без пробелов)');
-      console.error('  2. 2FA включен на Gmail аккаунте');
-      console.error('  3. App Password создан для правильного приложения');
-    } else {
-      console.log('✅ SMTP соединение успешно установлено');
-      console.log('SMTP настроен для отправки email на:', process.env.SMTP_USER);
-    }
-  });
+  console.log('ℹ️  Проверка SMTP соединения при старте отключена (будет проверено при первой отправке)');
+  console.log('ℹ️  Это помогает избежать проблем с блокировкой портов на некоторых хостингах');
 } else {
   console.warn('⚠️  SMTP не настроен: SMTP_USER или SMTP_PASS отсутствуют');
   console.warn('Для работы регистрации с подтверждением email необходимо настроить SMTP');
@@ -134,11 +138,15 @@ router.post('/register', async (req, res) => {
     let emailSent = false;
     let emailError = null;
     
-    // Функция для отправки email с повторными попытками
-    const sendEmailWithRetry = async (retries = 2) => {
+    // Функция для отправки email с повторными попытками и переключением портов
+    const sendEmailWithRetry = async (retries = 3) => {
+      let lastError = null;
+      
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
           console.log(`📧 Попытка ${attempt} из ${retries} отправки email на ${email}...`);
+          console.log(`📧 Используется порт ${transporter.options.port}, secure=${transporter.options.secure}`);
+          
           const mailInfo = await transporter.sendMail({
             from: process.env.SMTP_USER,
             to: email,
@@ -154,16 +162,29 @@ router.post('/register', async (req, res) => {
           });
           return mailInfo;
         } catch (err) {
+          lastError = err;
           console.error(`❌ Попытка ${attempt} не удалась:`, err.message);
-          if (attempt < retries) {
-            const delay = attempt * 2000; // 2, 4 секунды задержка между попытками
+          console.error(`   Код ошибки: ${err.code}`);
+          console.error(`   Команда: ${err.command || 'N/A'}`);
+          
+          // Если ошибка связана с подключением и не последняя попытка - пробуем другой порт
+          if (attempt < retries && (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED' || err.message.includes('timeout'))) {
+            console.log('🔄 Пробуем переключиться на альтернативный порт...');
+            switchTransporterPort();
+            
+            const delay = attempt * 2000; // 2, 4, 6 секунд задержка между попытками
+            console.log(`⏳ Повторная попытка через ${delay}мс с новым портом...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else if (attempt < retries) {
+            const delay = attempt * 2000;
             console.log(`⏳ Повторная попытка через ${delay}мс...`);
             await new Promise(resolve => setTimeout(resolve, delay));
-          } else {
-            throw err; // Последняя попытка - пробрасываем ошибку
           }
         }
       }
+      
+      // Если все попытки не удались - пробрасываем последнюю ошибку
+      throw lastError;
     };
     
     // Создаем промис для отправки email с таймаутом
