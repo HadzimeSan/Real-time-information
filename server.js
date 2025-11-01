@@ -133,6 +133,7 @@ io.on('connection', (socket) => {
   // Присоединение к комнате
   socket.on('join-room', (roomId) => {
     console.log(`Socket ${socket.id} (${socket.username}) attempting to join room: ${roomId}`);
+    console.log(`Current users map size: ${users.size}`);
     
     if (!roomId || typeof roomId !== 'string') {
       console.error('Invalid roomId:', roomId);
@@ -144,12 +145,25 @@ io.on('connection', (socket) => {
       rooms.set(roomId, { users: new Set(), content: '', cursors: new Map(), messages: [] });
     }
 
-    const room = rooms.get(roomId);
-    const user = users.get(socket.id);
-
+    let user = users.get(socket.id);
+    
+    // Если пользователь не найден, пытаемся его восстановить
     if (!user) {
-      console.error('User not found for socket:', socket.id);
-      return;
+      console.warn(`User not found for socket ${socket.id}, attempting to recreate...`);
+      if (socket.userId && socket.username) {
+        user = {
+          id: socket.userId,
+          username: socket.username,
+          status: 'online',
+          currentRoom: null
+        };
+        users.set(socket.id, user);
+        console.log(`User recreated for socket ${socket.id}:`, user);
+      } else {
+        console.error('Cannot recreate user - missing socket.userId or socket.username');
+        socket.emit('error', { message: 'User session expired. Please refresh the page.' });
+        return;
+      }
     }
 
     console.log(`User ${user.username} (${user.id}) current room before join: ${user.currentRoom}`);
@@ -190,10 +204,28 @@ io.on('connection', (socket) => {
   // Отправка сообщения
   socket.on('message', (data, callback) => {
     console.log(`Message received from socket ${socket.id}:`, data);
+    console.log(`Current users map size: ${users.size}, socket ids: ${Array.from(users.keys()).join(', ')}`);
     
     const user = users.get(socket.id);
     if (!user) {
       console.error('User not found for socket:', socket.id);
+      console.error('Available sockets:', Array.from(users.keys()));
+      console.error('Attempting to recreate user entry...');
+      
+      // Пытаемся восстановить пользователя из socket данных
+      if (socket.userId && socket.username) {
+        users.set(socket.id, {
+          id: socket.userId,
+          username: socket.username,
+          status: 'online',
+          currentRoom: null
+        });
+        console.log('User recreated for socket:', socket.id);
+        
+        if (callback) callback({ error: 'User recreated, please join a room first and try again.' });
+        return;
+      }
+      
       if (callback) callback({ error: 'User not found' });
       return;
     }
@@ -241,6 +273,9 @@ io.on('connection', (socket) => {
     
     // Отправляем сообщение всем в комнате
     io.to(user.currentRoom).emit('message', message);
+    
+    // Отправляем подтверждение отправителю
+    if (callback) callback({ success: true });
   });
 
   // Typing indicator
@@ -363,15 +398,22 @@ io.on('connection', (socket) => {
   });
 
   // Отключение
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
+    console.log(`Socket ${socket.id} disconnected: ${reason}`);
     const user = users.get(socket.id);
     if (user && user.currentRoom) {
       leaveRoom(socket, user.currentRoom);
     }
 
-    users.delete(socket.id);
+    if (users.has(socket.id)) {
+      users.delete(socket.id);
+      console.log(`User ${socket.id} removed from users map`);
+    } else {
+      console.warn(`User ${socket.id} was already removed from users map`);
+    }
+    
     broadcastOnlineUsers();
-    console.log(`User disconnected: ${socket.username}`);
+    console.log(`User disconnected: ${socket.username || 'unknown'}`);
   });
 
   function leaveRoom(socket, roomId) {
