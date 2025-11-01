@@ -2,19 +2,49 @@
 // Используем SERVER_URL из config.js, если он доступен, иначе текущий хост
 const serverUrl = typeof SERVER_URL !== 'undefined' ? SERVER_URL : window.location.origin;
 
-// Получаем токен из localStorage или запрашиваем аутентификацию
-const authToken = localStorage.getItem('authToken');
+// Функция для инициализации приложения
+function initializeApp() {
+    // Проверяем, есть ли токен в URL (от OAuth или Magic Link)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('token');
 
-if (!authToken) {
-    // Если нет токена, перенаправляем на страницу входа
-    window.location.href = '/auth.html';
+    // Если токен в URL, сохраняем его и убираем из URL
+    if (tokenFromUrl) {
+        console.log('Token found in URL, saving to localStorage');
+        localStorage.setItem('authToken', tokenFromUrl);
+        // Очищаем URL от токена
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // Используем токен сразу
+        initializeSocket(tokenFromUrl);
+        return;
+    }
+
+    // Получаем токен из localStorage
+    const authToken = localStorage.getItem('authToken');
+
+    // Если токена нет, перенаправляем на страницу входа
+    if (!authToken) {
+        console.log('No auth token found, redirecting to login');
+        window.location.href = '/auth.html';
+        return; // Прерываем выполнение
+    }
+
+    console.log('Token found in localStorage, initializing socket');
+    // Инициализируем Socket.io с токеном
+    initializeSocket(authToken);
 }
 
-const socket = io(serverUrl, {
-    auth: {
-        token: authToken
-    }
-});
+// Инициализация Socket.io
+function initializeSocket(authToken) {
+    socket = io(serverUrl, {
+        auth: {
+            token: authToken
+        }
+    });
+
+    // Перемещаем все обработчики socket в эту функцию
+    setupSocketHandlers(socket);
+}
 
 // Глобальные переменные
 let currentRoom = null;
@@ -49,8 +79,10 @@ const cancelRoomBtn = document.getElementById('cancelRoomBtn');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const newRoomName = document.getElementById('newRoomName');
 
-// Инициализация
-socket.on('connect', () => {
+// Настройка обработчиков Socket.io
+function setupSocketHandlers(socket) {
+    // Инициализация
+    socket.on('connect', () => {
     console.log('Connected to server');
     if (socket.user && socket.user.username) {
         usernameEl.textContent = socket.user.username;
@@ -260,159 +292,8 @@ socket.on('user-left', (data) => {
     removeCursor(data.userId);
 });
 
-// События UI
-
-// Отправка сообщения
-sendButton.addEventListener('click', sendMessage);
-
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-});
-
-messageInput.addEventListener('input', () => {
-    if (!currentRoom) return;
-    
-    socket.emit('typing-start');
-    
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => {
-        socket.emit('typing-stop');
-    }, 1000);
-});
-
-// Переключение редактора
-toggleEditorBtn.addEventListener('click', () => {
-    isEditorOpen = !isEditorOpen;
-    collaborativeEditor.style.display = isEditorOpen ? 'flex' : 'none';
-    chatMessages.style.display = isEditorOpen ? 'none' : 'flex';
-    toggleEditorBtn.classList.toggle('active', isEditorOpen);
-    
-    if (isEditorOpen && !currentRoom) {
-        alert('Выберите канал для совместного редактирования');
-        isEditorOpen = false;
-        collaborativeEditor.style.display = 'none';
-        chatMessages.style.display = 'flex';
-        toggleEditorBtn.classList.remove('active');
-    }
-});
-
-closeEditorBtn.addEventListener('click', () => {
-    isEditorOpen = false;
-    collaborativeEditor.style.display = 'none';
-    chatMessages.style.display = 'flex';
-    toggleEditorBtn.classList.remove('active');
-});
-
-// Совместное редактирование
-let lastValue = '';
-sharedDocument.addEventListener('input', (e) => {
-    if (!currentRoom || !isEditorOpen) return;
-    
-    const newValue = e.target.value;
-    const cursorPos = e.target.selectionStart;
-    
-    // Определяем тип изменения
-    if (newValue.length > lastValue.length) {
-        // Вставка
-        const inserted = newValue.substring(lastValue.length);
-        const position = cursorPos - inserted.length;
-        
-        socket.emit('document-change', {
-            operation: 'insert',
-            position: position,
-            text: inserted
-        });
-    } else if (newValue.length < lastValue.length) {
-        // Удаление
-        const deleted = lastValue.substring(cursorPos, lastValue.length - newValue.length + cursorPos);
-        
-        socket.emit('document-change', {
-            operation: 'delete',
-            position: cursorPos,
-            length: deleted.length
-        });
-    }
-    
-    lastValue = newValue;
-    
-    // Обновляем позицию курсора
-    updateOwnCursor(cursorPos);
-});
-
-sharedDocument.addEventListener('selectionchange', () => {
-    if (sharedDocument === document.activeElement) {
-        updateOwnCursor(sharedDocument.selectionStart);
-    }
-});
-
-// Загрузка файлов
-uploadFileBtn.addEventListener('click', () => {
-    fileInput.click();
-});
-
-fileInput.addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files);
-    for (const file of files) {
-        await uploadFile(file);
-    }
-    fileInput.value = '';
-});
-
-// Drag & Drop
-['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-    document.addEventListener(eventName, preventDefaults, false);
-});
-
-function preventDefaults(e) {
-    e.preventDefault();
-    e.stopPropagation();
-}
-
-['dragenter', 'dragover'].forEach(eventName => {
-    document.addEventListener(eventName, () => {
-        document.body.classList.add('drag-over');
-    });
-});
-
-['dragleave', 'drop'].forEach(eventName => {
-    document.addEventListener(eventName, () => {
-        document.body.classList.remove('drag-over');
-    });
-});
-
-document.addEventListener('drop', async (e) => {
-    const files = Array.from(e.dataTransfer.files);
-    for (const file of files) {
-        await uploadFile(file);
-    }
-});
-
-// Создание комнаты
-createRoomBtn.addEventListener('click', () => {
-    createRoomModal.classList.add('active');
-    newRoomName.value = '';
-    newRoomName.focus();
-});
-
-createRoomConfirmBtn.addEventListener('click', () => {
-    const roomName = newRoomName.value.trim();
-    if (roomName) {
-        socket.emit('join-room', roomName);
-        addRoomToList(roomName);
-        createRoomModal.classList.remove('active');
-    }
-});
-
-cancelRoomBtn.addEventListener('click', () => {
-    createRoomModal.classList.remove('active');
-});
-
-closeModalBtn.addEventListener('click', () => {
-    createRoomModal.classList.remove('active');
-});
+// Глобальная переменная для socket (будет установлена при инициализации)
+let socket = null;
 
 // Вспомогательные функции
 
@@ -424,7 +305,7 @@ function addRoomToList(roomId) {
     li.dataset.roomId = roomId;
     li.textContent = `# ${roomId}`;
     li.addEventListener('click', () => {
-        socket.emit('join-room', roomId);
+        if (socket) socket.emit('join-room', roomId);
     });
     roomsList.appendChild(li);
 }
@@ -442,6 +323,10 @@ function sendMessage() {
     }
     
     console.log('Sending message:', { text, room: currentRoom });
+    if (!socket) {
+        console.error('Socket not initialized');
+        return;
+    }
     socket.emit('message', { text }, (response) => {
         if (response && response.error) {
             console.error('Error sending message:', response.error);
@@ -451,7 +336,7 @@ function sendMessage() {
         }
     });
     messageInput.value = '';
-    socket.emit('typing-stop');
+    if (socket) socket.emit('typing-stop');
 }
 
 function addMessage(message, scroll = true) {
@@ -549,12 +434,14 @@ async function uploadFile(file) {
         
         const data = await response.json();
         
-        socket.emit('file-upload', {
-            fileName: data.fileName,
-            fileUrl: data.fileUrl,
-            fileSize: data.fileSize,
-            fileType: data.fileType
-        });
+        if (socket) {
+            socket.emit('file-upload', {
+                fileName: data.fileName,
+                fileUrl: data.fileUrl,
+                fileSize: data.fileSize,
+                fileType: data.fileType
+            });
+        }
     } catch (error) {
         console.error('Error uploading file:', error);
         alert('Ошибка при загрузке файла');
@@ -597,7 +484,7 @@ function updateRoomUsers(users) {
 }
 
 function updateOwnCursor(position) {
-    if (!currentRoom) return;
+    if (!currentRoom || !socket) return;
     
     socket.emit('cursor-update', {
         position: position,
@@ -746,14 +633,239 @@ if ('serviceWorker' in navigator) {
         });
 }
 
-// Обработка push-уведомлений
-socket.on('message', (message) => {
-    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification(`Новое сообщение от ${message.username}`, {
-            body: message.text,
-            icon: '/icon.svg',
-            tag: message.id
+    // Обработка push-уведомлений
+    socket.on('message', (message) => {
+        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification(`Новое сообщение от ${message.username}`, {
+                body: message.text,
+                icon: '/icon.svg',
+                tag: message.id
+            });
+        }
+    });
+    
+    // Инициализация UI обработчиков (вызываются один раз)
+    setupUIHandlers(socket);
+}
+
+// Настройка обработчиков UI (вызывается один раз)
+function setupUIHandlers(socket) {
+    // Отправка сообщения
+    sendButton.addEventListener('click', sendMessage);
+
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    messageInput.addEventListener('input', () => {
+        if (!currentRoom) return;
+        
+        socket.emit('typing-start');
+        
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            socket.emit('typing-stop');
+        }, 1000);
+    });
+
+    // Переключение редактора
+    toggleEditorBtn.addEventListener('click', () => {
+        isEditorOpen = !isEditorOpen;
+        collaborativeEditor.style.display = isEditorOpen ? 'flex' : 'none';
+        chatMessages.style.display = isEditorOpen ? 'none' : 'flex';
+        toggleEditorBtn.classList.toggle('active', isEditorOpen);
+        
+        if (isEditorOpen && !currentRoom) {
+            alert('Выберите канал для совместного редактирования');
+            isEditorOpen = false;
+            collaborativeEditor.style.display = 'none';
+            chatMessages.style.display = 'flex';
+            toggleEditorBtn.classList.remove('active');
+        }
+    });
+
+    closeEditorBtn.addEventListener('click', () => {
+        isEditorOpen = false;
+        collaborativeEditor.style.display = 'none';
+        chatMessages.style.display = 'flex';
+        toggleEditorBtn.classList.remove('active');
+    });
+
+    // Совместное редактирование
+    let lastValue = '';
+    sharedDocument.addEventListener('input', (e) => {
+        if (!currentRoom || !isEditorOpen || !socket) return;
+        
+        const newValue = e.target.value;
+        const cursorPos = e.target.selectionStart;
+        
+        // Определяем тип изменения
+        if (newValue.length > lastValue.length) {
+            // Вставка
+            const inserted = newValue.substring(lastValue.length);
+            const position = cursorPos - inserted.length;
+            
+            socket.emit('document-change', {
+                operation: 'insert',
+                position: position,
+                text: inserted
+            });
+        } else if (newValue.length < lastValue.length) {
+            // Удаление
+            const deleted = lastValue.substring(cursorPos, lastValue.length - newValue.length + cursorPos);
+            
+            socket.emit('document-change', {
+                operation: 'delete',
+                position: cursorPos,
+                length: deleted.length
+            });
+        }
+        
+        lastValue = newValue;
+        
+        // Обновляем позицию курсора
+        updateOwnCursor(cursorPos);
+    });
+
+    sharedDocument.addEventListener('selectionchange', () => {
+        if (sharedDocument === document.activeElement) {
+            updateOwnCursor(sharedDocument.selectionStart);
+        }
+    });
+
+    // Загрузка файлов
+    uploadFileBtn.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        for (const file of files) {
+            await uploadFile(file);
+        }
+        fileInput.value = '';
+    });
+
+    // Drag & Drop
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        document.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        document.addEventListener(eventName, () => {
+            document.body.classList.add('drag-over');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        document.addEventListener(eventName, () => {
+            document.body.classList.remove('drag-over');
+        });
+    });
+
+    document.addEventListener('drop', async (e) => {
+        const files = Array.from(e.dataTransfer.files);
+        for (const file of files) {
+            await uploadFile(file);
+        }
+    });
+
+    // Создание комнаты
+    createRoomBtn.addEventListener('click', () => {
+        createRoomModal.classList.add('active');
+        newRoomName.value = '';
+        newRoomName.focus();
+    });
+
+    createRoomConfirmBtn.addEventListener('click', () => {
+        const roomName = newRoomName.value.trim();
+        if (roomName && socket) {
+            socket.emit('join-room', roomName);
+            addRoomToList(roomName);
+            createRoomModal.classList.remove('active');
+        }
+    });
+
+    cancelRoomBtn.addEventListener('click', () => {
+        createRoomModal.classList.remove('active');
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+        createRoomModal.classList.remove('active');
+    });
+
+    // Кнопка выхода
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            if (confirm('Вы уверены, что хотите выйти?')) {
+                localStorage.removeItem('authToken');
+                socket.disconnect();
+                window.location.href = '/auth.html';
+            }
         });
     }
-});
+}
+
+// Функции для работы с localStorage
+function saveMessagesToLocalStorage(roomId, messages) {
+    try {
+        const key = `chat_history_${roomId}`;
+        localStorage.setItem(key, JSON.stringify(messages));
+    } catch (e) {
+        console.warn('Failed to save messages to localStorage:', e);
+    }
+}
+
+function getMessagesFromLocalStorage(roomId) {
+    try {
+        const key = `chat_history_${roomId}`;
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : null;
+    } catch (e) {
+        console.warn('Failed to get messages from localStorage:', e);
+        return null;
+    }
+}
+
+// Загружаем историю из localStorage при присоединении к комнате (как бэкап)
+function loadMessagesFromLocalStorage(roomId) {
+    const messages = getMessagesFromLocalStorage(roomId);
+    if (messages && messages.length > 0) {
+        console.log(`Loading ${messages.length} messages from localStorage for room ${roomId}`);
+        messages.forEach(message => {
+            addMessage(message, false);
+        });
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 100);
+    }
+}
+
+// Регистрация Service Worker для push-уведомлений
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+        .then(registration => {
+            console.log('Service Worker registered:', registration);
+            
+            // Запрос разрешения на уведомления
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        })
+        .catch(error => {
+            console.error('Service Worker registration failed:', error);
+        });
+}
+
+// Запуск приложения
+initializeApp();
 

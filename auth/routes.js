@@ -288,6 +288,7 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
 } else {
   router.get('/facebook', (req, res) => {
     res.status(503).json({ 
+
       error: 'Facebook OAuth не настроен',
       message: 'Для использования Facebook OAuth необходимо настроить переменные окружения FACEBOOK_APP_ID и FACEBOOK_APP_SECRET в настройках сервера.',
       setupGuide: '/OAUTH_SETUP.md'
