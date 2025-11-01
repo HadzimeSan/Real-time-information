@@ -159,6 +159,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                     if (devCode) {
                         devCode.textContent = errorData.development.verificationCode;
                         devCode.style.setProperty('color', '#856404', 'important');
+                        
                         devCode.style.setProperty('font-size', '18px', 'important');
                         devCode.style.setProperty('font-weight', 'bold', 'important');
                     }
@@ -203,11 +204,58 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                 devCodeDisplay.style.setProperty('display', 'block', 'important');
                 devCodeDisplay.style.setProperty('visibility', 'visible', 'important');
                 devCodeDisplay.style.setProperty('opacity', '1', 'important');
+                devCodeDisplay.style.setProperty('height', 'auto', 'important');
+                devCodeDisplay.style.setProperty('width', 'auto', 'important');
+                devCodeDisplay.style.setProperty('min-height', '40px', 'important');
+                devCodeDisplay.style.setProperty('position', 'relative', 'important');
+                devCodeDisplay.style.setProperty('z-index', '9999', 'important');
+                
+                // Проверяем родительские элементы
+                let parent = devCodeDisplay.parentElement;
+                let level = 0;
+                while (parent && level < 5) {
+                    const parentStyles = window.getComputedStyle(parent);
+                    console.log(`✅ Родитель элемент уровень ${level}:`, {
+                        tag: parent.tagName,
+                        id: parent.id,
+                        class: parent.className,
+                        display: parentStyles.display,
+                        visibility: parentStyles.visibility,
+                        opacity: parentStyles.opacity,
+                        height: parentStyles.height
+                    });
+                    
+                    // Убеждаемся, что родители видимы
+                    if (parentStyles.display === 'none') {
+                        parent.style.setProperty('display', 'block', 'important');
+                    }
+                    parent = parent.parentElement;
+                    level++;
+                }
+                
                 console.log('✅ devCodeDisplay показан');
-                console.log('✅ Проверка стилей:', {
-                    display: window.getComputedStyle(devCodeDisplay).display,
-                    visibility: window.getComputedStyle(devCodeDisplay).visibility,
-                    opacity: window.getComputedStyle(devCodeDisplay).opacity
+                const computedStyles = window.getComputedStyle(devCodeDisplay);
+                console.log('✅ Проверка стилей devCodeDisplay:', {
+                    display: computedStyles.display,
+                    visibility: computedStyles.visibility,
+                    opacity: computedStyles.opacity,
+                    height: computedStyles.height,
+                    width: computedStyles.width,
+                    position: computedStyles.position,
+                    zIndex: computedStyles.zIndex,
+                    backgroundColor: computedStyles.backgroundColor,
+                    padding: computedStyles.padding,
+                    margin: computedStyles.margin
+                });
+                
+                // Проверяем, что элемент действительно в DOM
+                console.log('✅ Проверка DOM:', {
+                    offsetHeight: devCodeDisplay.offsetHeight,
+                    offsetWidth: devCodeDisplay.offsetWidth,
+                    clientHeight: devCodeDisplay.clientHeight,
+                    clientWidth: devCodeDisplay.clientWidth,
+                    scrollHeight: devCodeDisplay.scrollHeight,
+                    scrollWidth: devCodeDisplay.scrollWidth
                 });
             } else {
                 console.error('❌ devCodeDisplay не найден!');
