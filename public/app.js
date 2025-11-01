@@ -37,11 +37,14 @@ function initializeApp() {
 // Инициализация Socket.io
 function initializeSocket(authToken) {
     // Если socket уже существует, отключаем его
-    
     if (socket && socket.connected) {
         console.log('Disconnecting existing socket');
         socket.disconnect();
+        socket.removeAllListeners(); // Удаляем все обработчики
     }
+    
+    // Сбрасываем счетчик переподключений
+    reconnectAttempts = 0;
     
     socket = io(serverUrl, {
         auth: {
@@ -118,6 +121,7 @@ function setupSocketHandlers(socket) {
             usernameEl.textContent = data.username;
         }
         // Сбрасываем счетчик при успешном подключении
+    
         reconnectAttempts = 0;
         console.log('User connected:', data);
     });
