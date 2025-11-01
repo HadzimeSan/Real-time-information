@@ -100,6 +100,15 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.username} (${socket.userId})`);
 
+  // Удаляем старые подключения этого пользователя (если есть)
+  // Это предотвращает дублирование при переподключении
+  users.forEach((user, socketId) => {
+    if (user.id === socket.userId && socketId !== socket.id) {
+      console.log(`Removing duplicate connection for user ${socket.userId}: old socket ${socketId}`);
+      users.delete(socketId);
+    }
+  });
+
   // Добавляем пользователя в хранилище
   users.set(socket.id, {
     id: socket.userId,
@@ -387,7 +396,25 @@ io.on('connection', (socket) => {
   }
 
   function broadcastOnlineUsers() {
-    const onlineUsers = Array.from(users.values()).map(user => ({
+    // Создаем Map для дедупликации пользователей по userId
+    const uniqueUsers = new Map();
+    
+    // Проходим по всем пользователям и оставляем только уникальных по userId
+    users.forEach((user, socketId) => {
+      // Если пользователь с таким userId еще не добавлен, добавляем его
+      // Если уже есть, заменяем на новый (последнее подключение)
+      if (!uniqueUsers.has(user.id) || uniqueUsers.get(user.id).socketId !== socketId) {
+        uniqueUsers.set(user.id, {
+          id: user.id,
+          username: user.username,
+          status: user.status,
+          socketId: socketId
+        });
+      }
+    });
+
+    // Преобразуем в массив для отправки
+    const onlineUsers = Array.from(uniqueUsers.values()).map(user => ({
       id: user.id,
       username: user.username,
       status: user.status
