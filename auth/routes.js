@@ -215,25 +215,71 @@ router.post('/2fa/verify', async (req, res) => {
 // OAuth маршруты (только если настроены)
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-  router.get('/google/callback', passport.authenticate('google', { session: false }), (req, res) => {
-    const token = generateToken(req.user);
-    res.redirect(`/?token=${token}`);
+  router.get('/google/callback', 
+    passport.authenticate('google', { session: false, failureRedirect: '/auth.html?error=oauth_failed' }), 
+    (req, res) => {
+      try {
+        if (!req.user) {
+          return res.redirect('/auth.html?error=no_user');
+        }
+        const token = generateToken(req.user);
+        res.redirect(`/?token=${token}`);
+      } catch (error) {
+        console.error('Google OAuth callback error:', error);
+        res.redirect('/auth.html?error=' + encodeURIComponent(error.message));
+      }
+    }
+  );
+} else {
+  // Проброска для информативного сообщения
+  router.get('/google', (req, res) => {
+    res.status(503).json({ error: 'Google OAuth not configured' });
   });
 }
 
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
   router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
-  router.get('/github/callback', passport.authenticate('github', { session: false }), (req, res) => {
-    const token = generateToken(req.user);
-    res.redirect(`/?token=${token}`);
+  router.get('/github/callback',
+    passport.authenticate('github', { session: false, failureRedirect: '/auth.html?error=oauth_failed' }),
+    (req, res) => {
+      try {
+        if (!req.user) {
+          return res.redirect('/auth.html?error=no_user');
+        }
+        const token = generateToken(req.user);
+        res.redirect(`/?token=${token}`);
+      } catch (error) {
+        console.error('GitHub OAuth callback error:', error);
+        res.redirect('/auth.html?error=' + encodeURIComponent(error.message));
+      }
+    }
+  );
+} else {
+  router.get('/github', (req, res) => {
+    res.status(503).json({ error: 'GitHub OAuth not configured' });
   });
 }
 
 if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
   router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
-  router.get('/facebook/callback', passport.authenticate('facebook', { session: false }), (req, res) => {
-    const token = generateToken(req.user);
-    res.redirect(`/?token=${token}`);
+  router.get('/facebook/callback',
+    passport.authenticate('facebook', { session: false, failureRedirect: '/auth.html?error=oauth_failed' }),
+    (req, res) => {
+      try {
+        if (!req.user) {
+          return res.redirect('/auth.html?error=no_user');
+        }
+        const token = generateToken(req.user);
+        res.redirect(`/?token=${token}`);
+      } catch (error) {
+        console.error('Facebook OAuth callback error:', error);
+        res.redirect('/auth.html?error=' + encodeURIComponent(error.message));
+      }
+    }
+  );
+} else {
+  router.get('/facebook', (req, res) => {
+    res.status(503).json({ error: 'Facebook OAuth not configured' });
   });
 }
 

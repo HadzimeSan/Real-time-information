@@ -251,42 +251,80 @@ async function getUserById(userId) {
 // OAuth пользователи
 async function findOrCreateOAuthUser(provider, profile) {
   const users = await readUsers();
-  const email = profile.emails && profile.emails[0] && profile.emails[0].value;
   
-  if (!email) {
-    throw new Error('No email provided by OAuth provider');
+  // Получаем email из профиля (разные провайдеры имеют разную структуру)
+  let email = null;
+  if (profile.emails && profile.emails[0]) {
+    email = profile.emails[0].value || profile.emails[0];
+  } else if (profile._json && profile._json.email) {
+    email = profile._json.email;
+  } else if (provider === 'github' && profile._json && profile._json.email) {
+    email = profile._json.email;
   }
   
-  let user = users.find(u => u.email === email);
+  // Если email не найден, пытаемся создать пользователя по OAuth ID
+  const oauthId = profile.id || profile._json?.id;
+  if (!email && !oauthId) {
+    throw new Error('No email or OAuth ID provided by OAuth provider');
+  }
+  
+  let user = null;
+  
+  // Ищем пользователя по email
+  if (email) {
+    user = users.find(u => u.email === email);
+  }
+  
+  // Если не нашли по email, ищем по OAuth ID
+  if (!user && oauthId) {
+    user = users.find(u => u.oauthId === String(oauthId) && u.oauthProvider === provider);
+  }
+  
+  // Получаем username из профиля
+  const username = profile.displayName || profile.username || profile._json?.login || 
+                   (email ? email.split('@')[0] : `user_${oauthId}`);
   
   if (!user) {
     // Создаем нового пользователя
+    if (!email) {
+      // Генерируем временный email если его нет
+      email = `${username.toLowerCase().replace(/\s+/g, '_')}_${provider}@oauth.local`;
+    }
+    
     user = {
       id: crypto.randomUUID(),
       email,
-      username: profile.displayName || profile.username || email.split('@')[0],
+      username: username,
       password: null,
       authMethods: [provider],
-      oauthId: profile.id,
+      oauthId: String(oauthId),
       oauthProvider: provider,
-      avatar: profile.photos && profile.photos[0] && profile.photos[0].value,
+      avatar: (profile.photos && profile.photos[0] && profile.photos[0].value) || 
+              (profile._json && profile._json.avatar_url),
       twoFactorEnabled: false,
       twoFactorSecret: null,
       createdAt: new Date().toISOString(),
       lastLogin: new Date().toISOString()
     };
     users.push(user);
+    console.log(`Created new OAuth user: ${user.id} (${provider})`);
   } else {
-    // Обновляем информацию
+    // Обновляем информацию существующего пользователя
+    if (!user.authMethods) {
+      user.authMethods = [];
+    }
     if (!user.authMethods.includes(provider)) {
       user.authMethods.push(provider);
     }
-    user.oauthId = profile.id;
+    user.oauthId = String(oauthId);
     user.oauthProvider = provider;
     if (profile.photos && profile.photos[0]) {
       user.avatar = profile.photos[0].value;
+    } else if (profile._json && profile._json.avatar_url) {
+      user.avatar = profile._json.avatar_url;
     }
     user.lastLogin = new Date().toISOString();
+    console.log(`Updated OAuth user: ${user.id} (${provider})`);
   }
   
   await writeUsers(users);

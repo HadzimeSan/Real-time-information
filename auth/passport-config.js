@@ -22,15 +22,23 @@ passport.deserializeUser(async (id, done) => {
 
 // Google OAuth (только если настроен)
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const googleCallbackURL = process.env.GOOGLE_CALLBACK_URL || 
+    `${process.env.BASE_URL || 'http://localhost:3000'}/auth/google/callback`;
+  
+  console.log('Google OAuth configured with callback:', googleCallbackURL);
+  
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback'
+    callbackURL: googleCallbackURL
   }, async (accessToken, refreshToken, profile, done) => {
     try {
+      console.log('Google OAuth profile:', profile.id, profile.emails?.[0]?.value);
       const user = await findOrCreateOAuthUser('google', profile);
+      console.log('Google OAuth user created/found:', user.id);
       done(null, user);
     } catch (error) {
+      console.error('Google OAuth error:', error);
       done(error, null);
     }
   }));
@@ -40,15 +48,23 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
 // GitHub OAuth (только если настроен)
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  const githubCallbackURL = process.env.GITHUB_CALLBACK_URL || 
+    `${process.env.BASE_URL || 'http://localhost:3000'}/auth/github/callback`;
+  
+  console.log('GitHub OAuth configured with callback:', githubCallbackURL);
+  
   passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID,
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: process.env.GITHUB_CALLBACK_URL || '/auth/github/callback'
+    callbackURL: githubCallbackURL
   }, async (accessToken, refreshToken, profile, done) => {
     try {
+      console.log('GitHub OAuth profile:', profile.id, profile.username);
       const user = await findOrCreateOAuthUser('github', profile);
+      console.log('GitHub OAuth user created/found:', user.id);
       done(null, user);
     } catch (error) {
+      console.error('GitHub OAuth error:', error);
       done(error, null);
     }
   }));
@@ -58,16 +74,24 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
 
 // Facebook OAuth (только если настроен)
 if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+  const facebookCallbackURL = process.env.FACEBOOK_CALLBACK_URL || 
+    `${process.env.BASE_URL || 'http://localhost:3000'}/auth/facebook/callback`;
+  
+  console.log('Facebook OAuth configured with callback:', facebookCallbackURL);
+  
   passport.use(new FacebookStrategy({
     clientID: process.env.FACEBOOK_APP_ID,
     clientSecret: process.env.FACEBOOK_APP_SECRET,
-    callbackURL: process.env.FACEBOOK_CALLBACK_URL || '/auth/facebook/callback',
+    callbackURL: facebookCallbackURL,
     profileFields: ['id', 'displayName', 'photos', 'email']
   }, async (accessToken, refreshToken, profile, done) => {
     try {
+      console.log('Facebook OAuth profile:', profile.id, profile.displayName);
       const user = await findOrCreateOAuthUser('facebook', profile);
+      console.log('Facebook OAuth user created/found:', user.id);
       done(null, user);
     } catch (error) {
+      console.error('Facebook OAuth error:', error);
       done(error, null);
     }
   }));

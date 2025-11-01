@@ -10,7 +10,18 @@ if (token) {
 }
 
 if (error) {
-    showError(error);
+    let errorMessage = 'Ошибка аутентификации';
+    switch(error) {
+        case 'oauth_failed':
+            errorMessage = 'Ошибка входа через OAuth. Проверьте настройки или попробуйте другой метод входа.';
+            break;
+        case 'no_user':
+            errorMessage = 'Не удалось получить информацию о пользователе. Попробуйте снова.';
+            break;
+        default:
+            errorMessage = decodeURIComponent(error) || 'Ошибка входа';
+    }
+    showError(errorMessage);
 }
 
 // Переключение между табами
