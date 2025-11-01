@@ -143,12 +143,25 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                 // Если SMTP не настроен, показываем код для разработки
                 if (errorData.development && errorData.development.verificationCode) {
                     // Показываем поле для ввода кода даже при ошибке (для разработки)
-                    document.getElementById('verificationCodeSection').style.display = 'block';
-                    document.getElementById('devCodeDisplay').style.display = 'block';
-                    document.getElementById('devCode').textContent = errorData.development.verificationCode;
-                    document.getElementById('registerForm').style.display = 'none';
+                    const verificationCodeSection = document.getElementById('verificationCodeSection');
+                    const devCodeDisplay = document.getElementById('devCodeDisplay');
+                    const devCode = document.getElementById('devCode');
+                    const registerForm = document.getElementById('registerForm');
                     
-                    showMessage('SMTP не настроен, но код показан для разработки', 'info');
+                    if (verificationCodeSection) {
+                        verificationCodeSection.style.display = 'block';
+                    }
+                    if (devCodeDisplay) {
+                        devCodeDisplay.style.display = 'block';
+                    }
+                    if (devCode) {
+                        devCode.textContent = errorData.development.verificationCode;
+                    }
+                    if (registerForm) {
+                        registerForm.style.display = 'none';
+                    }
+                    
+                    showMessage(errorData.development.message || 'SMTP не настроен, но код показан для разработки', 'info');
                     return; // Выходим, не показывая ошибку
                 }
             } catch (parseError) {
@@ -162,13 +175,21 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         const data = await response.json();
         
         // Показываем поле для ввода кода
-        document.getElementById('verificationCodeSection').style.display = 'block';
+        const verificationCodeSection = document.getElementById('verificationCodeSection');
+        if (verificationCodeSection) {
+            verificationCodeSection.style.display = 'block';
+        }
         
         // Показываем код для разработки (если есть)
         if (data.development && data.development.verificationCode) {
-            document.getElementById('devCodeDisplay').style.display = 'block';
-            document.getElementById('devCode').textContent = data.development.verificationCode;
-            
+            const devCodeDisplay = document.getElementById('devCodeDisplay');
+            const devCode = document.getElementById('devCode');
+            if (devCodeDisplay) {
+                devCodeDisplay.style.display = 'block';
+            }
+            if (devCode) {
+                devCode.textContent = data.development.verificationCode;
+            }
             
             // Показываем дополнительное сообщение, если есть
             if (data.development.message) {
@@ -181,7 +202,10 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         }
         
         // Скрываем форму регистрации
-        document.getElementById('registerForm').style.display = 'none';
+        const registerForm = document.getElementById('registerForm');
+        if (registerForm) {
+            registerForm.style.display = 'none';
+        }
     } catch (error) {
         clearTimeout(timeoutId);
         
@@ -281,9 +305,15 @@ document.getElementById('resendCodeBtn').addEventListener('click', async () => {
                 
                 // Если SMTP не настроен, показываем код для разработки
                 if (errorData.development && errorData.development.verificationCode) {
-                    document.getElementById('devCodeDisplay').style.display = 'block';
-                    document.getElementById('devCode').textContent = errorData.development.verificationCode;
-                    showMessage('SMTP не настроен, но код показан для разработки', 'info');
+                    const devCodeDisplay = document.getElementById('devCodeDisplay');
+                    const devCode = document.getElementById('devCode');
+                    if (devCodeDisplay) {
+                        devCodeDisplay.style.display = 'block';
+                    }
+                    if (devCode) {
+                        devCode.textContent = errorData.development.verificationCode;
+                    }
+                    showMessage(errorData.development.message || 'SMTP не настроен, но код показан для разработки', 'info');
                     return;
                 }
             } catch (parseError) {
@@ -297,8 +327,19 @@ document.getElementById('resendCodeBtn').addEventListener('click', async () => {
         
         // Обновляем отображение кода для разработки (если есть)
         if (data.development && data.development.verificationCode) {
-            document.getElementById('devCodeDisplay').style.display = 'block';
-            document.getElementById('devCode').textContent = data.development.verificationCode;
+            const devCodeDisplay = document.getElementById('devCodeDisplay');
+            const devCode = document.getElementById('devCode');
+            if (devCodeDisplay) {
+                devCodeDisplay.style.display = 'block';
+            }
+            if (devCode) {
+                devCode.textContent = data.development.verificationCode;
+            }
+            
+            // Показываем сообщение из development, если есть
+            if (data.development.message) {
+                showMessage(data.development.message, 'info');
+            }
         }
         
         showMessage('Новый код подтверждения отправлен на ваш email!', 'success');
