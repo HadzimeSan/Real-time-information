@@ -24,6 +24,33 @@ if (error) {
     showError(errorMessage);
 }
 
+// Обработка клика по OAuth кнопкам с проверкой ошибок
+document.querySelectorAll('.oauth-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+        const href = btn.getAttribute('href');
+        if (!href) return;
+        
+        // Пробуем проверить доступность перед редиректом
+        try {
+            const response = await fetch(href, { 
+                method: 'HEAD',
+                redirect: 'manual'
+            });
+            
+            if (response.status === 503) {
+                e.preventDefault();
+                const provider = btn.classList.contains('google') ? 'Google' :
+                               btn.classList.contains('github') ? 'GitHub' :
+                               btn.classList.contains('facebook') ? 'Facebook' : 'OAuth';
+                showError(`${provider} OAuth не настроен. Обратитесь к администратору или используйте другой метод входа.`);
+            }
+        } catch (error) {
+            // Если проверка не удалась, разрешаем переход (пользователь увидит ошибку на сервере)
+            console.log('Could not pre-check OAuth:', error);
+        }
+    });
+});
+
 // Переключение между табами
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -219,22 +246,35 @@ async function checkAuth() {
 
 // Скрываем OAuth кнопки если провайдеры не настроены
 async function checkOAuthProviders() {
-    try {
-        // Пробуем получить доступ к OAuth endpoints
-        // Если они недоступны, скрываем кнопки
-        const providers = ['google', 'github', 'facebook'];
-        for (const provider of providers) {
+    const providers = ['google', 'github', 'facebook'];
+    
+    for (const provider of providers) {
+        const btn = document.querySelector(`.oauth-btn.${provider}`);
+        if (!btn) continue;
+        
             try {
-                await fetch(`/auth/${provider}`, { method: 'HEAD' });
-            } catch {
-                const btn = document.querySelector(`.oauth-btn.${provider}`);
-                if (btn) {
+                const response = await fetch(`/auth/${provider}`, { 
+                    method: 'GET',
+                    redirect: 'manual' // Не следовать редиректам
+                });
+            
+                // Если статус 503 (не настроен) или другой ошибки, скрываем кнопку
+                if (response.status === 503) {
                     btn.style.display = 'none';
+                    console.log(`${provider} OAuth not configured`);
+                } else if (response.status >= 400 && response.status !== 302) {
+                    // Если это не редирект (302), то ошибка
+                    const data = await response.json().catch(() => ({}));
+                    if (data.error && data.error.includes('not configured')) {
+                        btn.style.display = 'none';
+                        console.log(`${provider} OAuth not configured`);
+                    }
                 }
+            } catch (error) {
+                // Если запрос не удался (например, CORS), оставляем кнопку видимой
+                // Пользователь увидит ошибку при клике
+                console.log(`Could not check ${provider} OAuth status:`, error.message);
             }
-        }
-    } catch (error) {
-        console.log('OAuth providers check failed:', error);
     }
 }
 
