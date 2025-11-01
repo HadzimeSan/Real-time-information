@@ -179,11 +179,23 @@ function setupSocketHandlers(socket) {
 
     // Присоединение к комнате
     socket.on('room-joined', (data) => {
+        console.log('Received room-joined event:', data);
+        
+        if (!data || !data.roomId) {
+            console.error('Invalid room-joined data:', data);
+            return;
+        }
+        
         currentRoom = data.roomId;
-        currentRoomName.textContent = `# ${data.roomId}`;
+        
+        if (currentRoomName) {
+            currentRoomName.textContent = `# ${data.roomId}`;
+        }
         
         // Очищаем старые сообщения
-        chatMessages.innerHTML = '';
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
         
         // Загружаем историю сообщений из сервера
         if (data.messages && Array.isArray(data.messages)) {
@@ -197,7 +209,9 @@ function setupSocketHandlers(socket) {
             });
             // Прокручиваем в конец после загрузки всех сообщений
             setTimeout(() => {
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                if (chatMessages) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
             }, 100);
             
             // Сохраняем историю в localStorage
@@ -205,13 +219,13 @@ function setupSocketHandlers(socket) {
         }
         
         // Загружаем содержимое документа
-        if (data.content) {
+        if (data.content && sharedDocument) {
             sharedDocument.value = data.content;
             lastValue = data.content; // Синхронизируем lastValue
         }
         
         // Отображаем курсоры других пользователей
-        if (data.cursors) {
+        if (data.cursors && Array.isArray(data.cursors)) {
             data.cursors.forEach(cursor => {
                 if (cursor.userId !== currentUserId) {
                     addCursor(cursor.userId, cursor.username, cursor.position, cursor.color);
@@ -359,16 +373,36 @@ let lastValue = ''; // Для совместного редактировани�
 // Вспомогательные функции
 
 function addRoomToList(roomId) {
-    if (document.querySelector(`[data-room-id="${roomId}"]`)) return;
+    if (!roomId) return;
+    
+    // Проверяем, не существует ли уже такой канал
+    const existing = document.querySelector(`[data-room-id="${roomId}"]`);
+    if (existing) {
+        console.log(`Room ${roomId} already in list`);
+        return;
+    }
+    
+    if (!roomsList) {
+        console.error('roomsList element not found');
+        return;
+    }
     
     const li = document.createElement('li');
     li.className = 'room-item';
     li.dataset.roomId = roomId;
     li.textContent = `# ${roomId}`;
     li.addEventListener('click', () => {
-        if (socket) socket.emit('join-room', roomId);
+        console.log(`Clicked on room: ${roomId}`);
+        if (socket && socket.connected) {
+            console.log(`Emitting join-room for: ${roomId}`);
+            socket.emit('join-room', roomId);
+        } else {
+            console.error('Socket not connected, cannot join room');
+            alert('Не удалось подключиться к серверу. Обновите страницу.');
+        }
     });
     roomsList.appendChild(li);
+    console.log(`Added room ${roomId} to list`);
 }
 
 function sendMessage() {
