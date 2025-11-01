@@ -152,10 +152,15 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                         verificationCodeSection.style.display = 'block';
                     }
                     if (devCodeDisplay) {
-                        devCodeDisplay.style.display = 'block';
+                        devCodeDisplay.style.setProperty('display', 'block', 'important');
+                        devCodeDisplay.style.setProperty('visibility', 'visible', 'important');
+                        devCodeDisplay.style.setProperty('opacity', '1', 'important');
                     }
                     if (devCode) {
                         devCode.textContent = errorData.development.verificationCode;
+                        devCode.style.setProperty('color', '#856404', 'important');
+                        devCode.style.setProperty('font-size', '18px', 'important');
+                        devCode.style.setProperty('font-weight', 'bold', 'important');
                     }
                     if (registerForm) {
                         registerForm.style.display = 'none';
@@ -367,10 +372,15 @@ document.getElementById('resendCodeBtn').addEventListener('click', async () => {
             const devCodeDisplay = document.getElementById('devCodeDisplay');
             const devCode = document.getElementById('devCode');
             if (devCodeDisplay) {
-                devCodeDisplay.style.display = 'block';
+                devCodeDisplay.style.setProperty('display', 'block', 'important');
+                devCodeDisplay.style.setProperty('visibility', 'visible', 'important');
+                devCodeDisplay.style.setProperty('opacity', '1', 'important');
             }
             if (devCode) {
                 devCode.textContent = data.development.verificationCode;
+                devCode.style.setProperty('color', '#856404', 'important');
+                devCode.style.setProperty('font-size', '18px', 'important');
+                devCode.style.setProperty('font-weight', 'bold', 'important');
             }
             
             // Показываем сообщение из development, если есть
