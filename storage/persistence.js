@@ -45,35 +45,57 @@ function saveRooms(rooms) {
  */
 function loadRooms() {
   try {
-    if (!fs.existsSync(ROOMS_FILE)) {
-      console.log('Rooms file does not exist, starting with empty rooms');
+    // Используем try-catch вместо existsSync для лучшей производительности
+    let fileContent;
+    try {
+      fileContent = fs.readFileSync(ROOMS_FILE, 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        console.log('Rooms file does not exist, starting with empty rooms');
+        return new Map();
+      }
+      throw err;
+    }
+    
+    if (!fileContent || fileContent.trim() === '') {
+      console.log('Rooms file is empty, starting with empty rooms');
       return new Map();
     }
     
-    const fileContent = fs.readFileSync(ROOMS_FILE, 'utf8');
     const roomsData = JSON.parse(fileContent);
+    
+    // Если файл не содержит объектов, возвращаем пустую Map
+    if (!roomsData || typeof roomsData !== 'object') {
+      console.log('Invalid rooms data format, starting with empty rooms');
+      return new Map();
+    }
     
     const rooms = new Map();
     
     // Конвертируем объект обратно в Map
     Object.keys(roomsData).forEach(roomId => {
-      const data = roomsData[roomId];
-      rooms.set(roomId, {
-        // Восстанавливаем Set для users
-        users: new Set(data.users || []),
-        content: data.content || '',
-        // Восстанавливаем Map для cursors
-        cursors: new Map(Object.entries(data.cursors || {})),
-        // Восстанавливаем массив сообщений
-        messages: data.messages || []
-      });
+      try {
+        const data = roomsData[roomId];
+        rooms.set(roomId, {
+          // Восстанавливаем Set для users
+          users: new Set(data.users || []),
+          content: data.content || '',
+          // Восстанавливаем Map для cursors
+          cursors: new Map(Object.entries(data.cursors || {})),
+          // Восстанавливаем массив сообщений
+          messages: data.messages || []
+        });
+      } catch (err) {
+        console.error(`Error loading room ${roomId}:`, err);
+        // Пропускаем поврежденную комнату
+      }
     });
     
     console.log(`Loaded ${rooms.size} rooms from ${ROOMS_FILE}`);
     return rooms;
   } catch (error) {
     console.error('Error loading rooms:', error);
-    // В случае ошибки возвращаем пустую Map
+    // В случае ошибки возвращаем пустую Map, чтобы сервер мог запуститься
     return new Map();
   }
 }

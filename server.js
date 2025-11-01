@@ -59,20 +59,31 @@ const typingUsers = new Map(); // roomId -> Set of typing users
 let rooms = loadRooms();
 
 // Инициализация дефолтных комнат (только если их нет в сохраненных данных)
+let needsSave = false;
 if (!rooms.has('general')) {
   rooms.set('general', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+  needsSave = true;
 }
 if (!rooms.has('random')) {
   rooms.set('random', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+  needsSave = true;
 }
 if (!rooms.has('development')) {
   rooms.set('development', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+  needsSave = true;
 }
 
-// Сохраняем дефолтные комнаты если они были только что созданы
-if (rooms.size > 0) {
-  saveRoomsImmediate(rooms);
-  console.log('Initialized default rooms and saved to disk');
+// Сохраняем дефолтные комнаты асинхронно (не блокируя запуск сервера)
+if (needsSave) {
+  // Используем setImmediate чтобы не блокировать event loop
+  setImmediate(() => {
+    try {
+      saveRoomsImmediate(rooms);
+      console.log('Initialized default rooms and saved to disk');
+    } catch (error) {
+      console.error('Error saving default rooms:', error);
+    }
+  });
 }
 
 // Middleware для аутентификации Socket.io
