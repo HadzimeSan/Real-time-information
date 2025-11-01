@@ -180,6 +180,7 @@ function setupSocketHandlers(socket) {
     // Присоединение к комнате
     socket.on('room-joined', (data) => {
         console.log('Received room-joined event:', data);
+        console.log('Setting currentRoom to:', data?.roomId);
         
         if (!data || !data.roomId) {
             console.error('Invalid room-joined data:', data);
@@ -187,6 +188,7 @@ function setupSocketHandlers(socket) {
         }
         
         currentRoom = data.roomId;
+        console.log('Current room set to:', currentRoom);
         
         if (currentRoomName) {
             currentRoomName.textContent = `# ${data.roomId}`;
@@ -411,21 +413,35 @@ function sendMessage() {
         console.warn('Attempted to send empty message');
         return;
     }
+    
+    console.log('sendMessage called. currentRoom:', currentRoom, 'socket connected:', socket?.connected);
+    
     if (!currentRoom) {
-        console.error('No room selected');
+        console.error('No room selected, currentRoom is:', currentRoom);
         alert('Выберите канал для отправки сообщения');
         return;
     }
     
-    console.log('Sending message:', { text, room: currentRoom });
-    if (!socket) {
-        console.error('Socket not initialized');
+    if (!socket || !socket.connected) {
+        console.error('Socket not initialized or not connected. Socket:', socket, 'Connected:', socket?.connected);
+        alert('Не удалось подключиться к серверу. Обновите страницу.');
         return;
     }
+    
+    console.log('Sending message:', { text, room: currentRoom });
     socket.emit('message', { text }, (response) => {
+        console.log('Message send response:', response);
         if (response && response.error) {
             console.error('Error sending message:', response.error);
-            alert('Ошибка отправки сообщения: ' + response.error);
+            
+            // Если пользователь был восстановлен, попробуем присоединиться к комнате заново
+            if (response.error.includes('User recreated') || response.error.includes('join a room')) {
+                console.log('User was recreated, rejoining room:', currentRoom);
+                socket.emit('join-room', currentRoom);
+                alert('Сессия обновлена. Пожалуйста, попробуйте отправить сообщение еще раз.');
+            } else {
+                alert('Ошибка отправки сообщения: ' + response.error);
+            }
         } else {
             console.log('Message sent successfully');
         }
