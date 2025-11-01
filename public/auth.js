@@ -260,59 +260,68 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
                 
                 // Всегда создаем альтернативное отображение кода для гарантии видимости
                 console.log('🔧 Создаем гарантированно видимое отображение кода...');
-                // Находим родительский info-message
+                
+                // Удаляем старый элемент если есть
+                const oldVisibleCode = document.getElementById('visibleCodeDisplay');
+                if (oldVisibleCode) {
+                    oldVisibleCode.remove();
+                }
+                
+                // Находим второй параграф с текстом "Проверьте почту..."
                 const infoMessage = devCodeDisplay.closest('.info-message') || devCodeDisplay.parentElement;
                 const verificationCodeSection = document.getElementById('verificationCodeSection');
                 
-                // Создаем новый видимый элемент для кода с максимально заметными стилями
-                const codeAlert = document.createElement('div');
-                codeAlert.id = 'visibleCodeDisplay';
-                codeAlert.style.cssText = `
-                    display: block !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                    margin-top: 15px !important;
-                    margin-bottom: 15px !important;
-                    padding: 20px !important;
-                    background: #fff3cd !important;
-                    border: 3px solid #856404 !important;
-                    border-radius: 10px !important;
-                    font-size: 18px !important;
-                    color: #856404 !important;
-                    font-weight: bold !important;
-                    text-align: center !important;
-                    z-index: 99999 !important;
-                    position: relative !important;
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
-                    width: 100% !important;
-                    box-sizing: border-box !important;
-                `;
-                codeAlert.innerHTML = `
-                    <div style="font-size: 14px; margin-bottom: 10px; color: #856404;">Для разработки:</div>
-                    <div style="font-size: 32px; font-weight: bold; color: #856404; letter-spacing: 5px; font-family: monospace;">
-                        ${data.development.verificationCode}
-                    </div>
-                    <div style="font-size: 12px; margin-top: 10px; color: #856404; opacity: 0.8;">
-                        Используйте этот код для завершения регистрации
-                    </div>
-                `;
-                
-                // Пытаемся вставить после второго <p> элемента (после текста "Проверьте почту...")
+                // Вариант 1: Вставляем код прямо в текст второго параграфа
                 if (infoMessage) {
                     const paragraphs = infoMessage.querySelectorAll('p');
                     if (paragraphs.length >= 2) {
-                        // Вставляем после второго параграфа (перед devCodeDisplay)
-                        infoMessage.insertBefore(codeAlert, devCodeDisplay);
-                        console.log('✅ Код вставлен после второго параграфа');
-                    } else {
-                        // Если параграфов нет, добавляем в конец info-message
-                        infoMessage.appendChild(codeAlert);
-                        console.log('✅ Код добавлен в конец info-message');
+                        const secondParagraph = paragraphs[1];
+                        // Добавляем код прямо после текста параграфа
+                        const codeSpan = document.createElement('span');
+                        codeSpan.style.cssText = 'display: inline-block !important; margin-left: 10px; padding: 5px 10px; background: #fff3cd !important; border: 2px solid #856404 !important; border-radius: 5px !important; font-size: 20px !important; font-weight: bold !important; color: #856404 !important; font-family: monospace !important; letter-spacing: 2px !important;';
+                        codeSpan.textContent = data.development.verificationCode;
+                        secondParagraph.appendChild(codeSpan);
+                        console.log('✅ Код вставлен в текст второго параграфа');
                     }
-                } else if (verificationCodeSection) {
-                    // Если infoMessage не найден, вставляем прямо в verificationCodeSection
-                    verificationCodeSection.insertBefore(codeAlert, verificationCodeSection.firstChild);
-                    console.log('✅ Код вставлен в начало verificationCodeSection');
+                }
+                
+                // Вариант 2: Создаем большой заметный блок ПЕРЕД формой
+                const verifyEmailForm = document.getElementById('verifyEmailForm');
+                if (verifyEmailForm && verificationCodeSection) {
+                    const codeAlert = document.createElement('div');
+                    codeAlert.id = 'visibleCodeDisplay';
+                    codeAlert.style.cssText = `
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        margin: 20px 0 !important;
+                        padding: 25px !important;
+                        background: #fff3cd !important;
+                        border: 4px solid #856404 !important;
+                        border-radius: 12px !important;
+                        font-size: 16px !important;
+                        color: #856404 !important;
+                        font-weight: bold !important;
+                        text-align: center !important;
+                        z-index: 99999 !important;
+                        position: relative !important;
+                        box-shadow: 0 6px 12px rgba(0,0,0,0.3) !important;
+                        width: 100% !important;
+                        box-sizing: border-box !important;
+                    `;
+                    codeAlert.innerHTML = `
+                        <div style="font-size: 16px; margin-bottom: 15px; color: #856404; font-weight: bold;">
+                            🔐 КОД ПОДТВЕРЖДЕНИЯ
+                        </div>
+                        <div style="font-size: 48px; font-weight: bold; color: #856404; letter-spacing: 8px; font-family: 'Courier New', monospace; margin: 20px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
+                            ${data.development.verificationCode}
+                        </div>
+                        <div style="font-size: 14px; margin-top: 15px; color: #856404; opacity: 0.9;">
+                            Введите этот код в поле выше для завершения регистрации
+                        </div>
+                    `;
+                    verificationCodeSection.insertBefore(codeAlert, verifyEmailForm);
+                    console.log('✅ Большой блок с кодом создан перед формой');
                 }
                 
                 console.log('✅ Создано гарантированно видимое отображение кода');
