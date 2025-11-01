@@ -170,175 +170,191 @@ function setupSocketHandlers(socket) {
         }
     });
 
-// Получение списка комнат
-socket.on('rooms-list', (rooms) => {
-    rooms.forEach(room => {
-        addRoomToList(room);
+    // Получение списка комнат
+    socket.on('rooms-list', (rooms) => {
+        rooms.forEach(room => {
+            addRoomToList(room);
+        });
     });
-});
 
-// Присоединение к комнате
-socket.on('room-joined', (data) => {
-    currentRoom = data.roomId;
-    currentRoomName.textContent = `# ${data.roomId}`;
-    
-    // Очищаем старые сообщения
-    chatMessages.innerHTML = '';
-    
-    // Загружаем историю сообщений из сервера
-    if (data.messages && Array.isArray(data.messages)) {
-        console.log(`Loading ${data.messages.length} messages from server for room ${data.roomId}`);
-        data.messages.forEach(message => {
-            if (message.type === 'file') {
-                addFileMessage(message, false);
-            } else {
-                addMessage(message, false); // false = не прокручивать до конца сразу
+    // Присоединение к комнате
+    socket.on('room-joined', (data) => {
+        currentRoom = data.roomId;
+        currentRoomName.textContent = `# ${data.roomId}`;
+        
+        // Очищаем старые сообщения
+        chatMessages.innerHTML = '';
+        
+        // Загружаем историю сообщений из сервера
+        if (data.messages && Array.isArray(data.messages)) {
+            console.log(`Loading ${data.messages.length} messages from server for room ${data.roomId}`);
+            data.messages.forEach(message => {
+                if (message.type === 'file') {
+                    addFileMessage(message, false);
+                } else {
+                    addMessage(message, false); // false = не прокручивать до конца сразу
+                }
+            });
+            // Прокручиваем в конец после загрузки всех сообщений
+            setTimeout(() => {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }, 100);
+            
+            // Сохраняем историю в localStorage
+            saveMessagesToLocalStorage(data.roomId, data.messages);
+        }
+        
+        // Загружаем содержимое документа
+        if (data.content) {
+            sharedDocument.value = data.content;
+            lastValue = data.content; // Синхронизируем lastValue
+        }
+        
+        // Отображаем курсоры других пользователей
+        if (data.cursors) {
+            data.cursors.forEach(cursor => {
+                if (cursor.userId !== currentUserId) {
+                    addCursor(cursor.userId, cursor.username, cursor.position, cursor.color);
+                }
+            });
+        }
+        
+        // Активируем выбранную комнату
+        document.querySelectorAll('.room-item').forEach(item => {
+            item.classList.remove('active');
+            if (item.dataset.roomId === currentRoom) {
+                item.classList.add('active');
             }
         });
-        // Прокручиваем в конец после загрузки всех сообщений
-        setTimeout(() => {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }, 100);
+    });
+
+    // Обработка сообщений
+    socket.on('message', (message) => {
+        console.log('Received message:', message);
+        addMessage(message);
         
-        // Сохраняем историю в localStorage
-        saveMessagesToLocalStorage(data.roomId, data.messages);
-    }
-    
-    // Загружаем содержимое документа
-    if (data.content) {
-        sharedDocument.value = data.content;
-        lastValue = data.content; // Синхронизируем lastValue
-    }
-    
-    // Отображаем курсоры других пользователей
-    if (data.cursors) {
-        data.cursors.forEach(cursor => {
-            if (cursor.userId !== currentUserId) {
-                addCursor(cursor.userId, cursor.username, cursor.position, cursor.color);
+        // Сохраняем сообщение в localStorage
+        if (currentRoom) {
+            const messages = getMessagesFromLocalStorage(currentRoom) || [];
+            messages.push(message);
+            // Ограничиваем до 100 сообщений в localStorage
+            if (messages.length > 100) {
+                messages.splice(0, messages.length - 100);
             }
-        });
-    }
-    
-    // Активируем выбранную комнату
-    document.querySelectorAll('.room-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.roomId === currentRoom) {
-            item.classList.add('active');
+            saveMessagesToLocalStorage(currentRoom, messages);
         }
     });
-});
 
-// Обработка сообщений
-socket.on('message', (message) => {
-    console.log('Received message:', message);
-    addMessage(message);
-    
-    // Сохраняем сообщение в localStorage
-    if (currentRoom) {
-        const messages = getMessagesFromLocalStorage(currentRoom) || [];
-        messages.push(message);
-        // Ограничиваем до 100 сообщений в localStorage
-        if (messages.length > 100) {
-            messages.splice(0, messages.length - 100);
-        }
-        saveMessagesToLocalStorage(currentRoom, messages);
-    }
-});
+    // Typing indicators
+    socket.on('user-typing', (data) => {
+        showTypingIndicator(data.username);
+    });
 
-// Typing indicators
-socket.on('user-typing', (data) => {
-    showTypingIndicator(data.username);
-});
+    socket.on('user-stopped-typing', (data) => {
+        hideTypingIndicator();
+    });
 
-socket.on('user-stopped-typing', (data) => {
-    hideTypingIndicator();
-});
-
-// Обновление документа
-socket.on('document-updated', (data) => {
-    if (data.userId === currentUserId) return;
-    
-    const textarea = sharedDocument;
-    const cursorPos = textarea.selectionStart;
-    
-    if (data.operation === 'insert') {
-        const before = textarea.value.substring(0, data.position);
-        const after = textarea.value.substring(data.position);
-        textarea.value = before + data.text + after;
+    // Обновление документа
+    socket.on('document-updated', (data) => {
+        if (data.userId === currentUserId) return;
         
-        // Корректируем позицию курсора
-        if (cursorPos >= data.position) {
-            setTimeout(() => {
-                textarea.setSelectionRange(cursorPos + data.text.length, cursorPos + data.text.length);
-            }, 0);
-        }
-    } else if (data.operation === 'delete') {
-        const before = textarea.value.substring(0, data.position);
-        const after = textarea.value.substring(data.position + data.length);
-        textarea.value = before + after;
+        const textarea = sharedDocument;
+        const cursorPos = textarea.selectionStart;
         
-        // Корректируем позицию курсора
-        if (cursorPos > data.position + data.length) {
-            setTimeout(() => {
-                textarea.setSelectionRange(cursorPos - data.length, cursorPos - data.length);
-            }, 0);
-        } else if (cursorPos > data.position) {
-            setTimeout(() => {
-                textarea.setSelectionRange(data.position, data.position);
-            }, 0);
+        if (data.operation === 'insert') {
+            const before = textarea.value.substring(0, data.position);
+            const after = textarea.value.substring(data.position);
+            textarea.value = before + data.text + after;
+            
+            // Корректируем позицию курсора
+            if (cursorPos >= data.position) {
+                setTimeout(() => {
+                    textarea.setSelectionRange(cursorPos + data.text.length, cursorPos + data.text.length);
+                }, 0);
+            }
+        } else if (data.operation === 'delete') {
+            const before = textarea.value.substring(0, data.position);
+            const after = textarea.value.substring(data.position + data.length);
+            textarea.value = before + after;
+            
+            // Корректируем позицию курсора
+            if (cursorPos > data.position + data.length) {
+                setTimeout(() => {
+                    textarea.setSelectionRange(cursorPos - data.length, cursorPos - data.length);
+                }, 0);
+            } else if (cursorPos > data.position) {
+                setTimeout(() => {
+                    textarea.setSelectionRange(data.position, data.position);
+                }, 0);
+            }
         }
-    }
-    
-    // Обновляем курсоры и синхронизируем lastValue
-    lastValue = textarea.value;
-    updateCursorPositions();
-});
+        
+        // Обновляем курсоры и синхронизируем lastValue
+        lastValue = textarea.value;
+        updateCursorPositions();
+    });
 
-socket.on('cursor-updated', (data) => {
-    if (data.userId !== currentUserId) {
-        addCursor(data.userId, data.username, data.position, data.color);
-    }
-});
-
-// Файлы
-socket.on('file-uploaded', (fileMessage) => {
-    console.log('Received file message:', fileMessage);
-    addFileMessage(fileMessage);
-    
-    // Сохраняем файловое сообщение в localStorage
-    if (currentRoom) {
-        const messages = getMessagesFromLocalStorage(currentRoom) || [];
-        messages.push(fileMessage);
-        if (messages.length > 100) {
-            messages.splice(0, messages.length - 100);
+    socket.on('cursor-updated', (data) => {
+        if (data.userId !== currentUserId) {
+            addCursor(data.userId, data.username, data.position, data.color);
         }
-        saveMessagesToLocalStorage(currentRoom, messages);
-    }
-});
+    });
 
-// Онлайн пользователи
-socket.on('online-users-updated', (users) => {
-    onlineCount.textContent = users.length;
-    updateOnlineUsersList(users);
-});
+    // Файлы
+    socket.on('file-uploaded', (fileMessage) => {
+        console.log('Received file message:', fileMessage);
+        addFileMessage(fileMessage);
+        
+        // Сохраняем файловое сообщение в localStorage
+        if (currentRoom) {
+            const messages = getMessagesFromLocalStorage(currentRoom) || [];
+            messages.push(fileMessage);
+            if (messages.length > 100) {
+                messages.splice(0, messages.length - 100);
+            }
+            saveMessagesToLocalStorage(currentRoom, messages);
+        }
+    });
 
-socket.on('room-users-updated', (users) => {
-    updateRoomUsers(users);
-});
+    // Онлайн пользователи
+    socket.on('online-users-updated', (users) => {
+        onlineCount.textContent = users.length;
+        updateOnlineUsersList(users);
+    });
 
-socket.on('user-joined', (data) => {
-    console.log(`${data.username} присоединился к комнате`);
-});
+    socket.on('room-users-updated', (users) => {
+        updateRoomUsers(users);
+    });
 
-socket.on('user-left', (data) => {
-    console.log(`${data.username} покинул комнату`);
-    removeCursor(data.userId);
-});
+    socket.on('user-joined', (data) => {
+        console.log(`${data.username} присоединился к комнате`);
+    });
+
+    socket.on('user-left', (data) => {
+        console.log(`${data.username} покинул комнату`);
+        removeCursor(data.userId);
+    });
+
+    // Обработка push-уведомлений
+    socket.on('message', (message) => {
+        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification(`Новое сообщение от ${message.username}`, {
+                body: message.text,
+                icon: '/icon.svg',
+                tag: message.id
+            });
+        }
+    });
+    
+    // Инициализация UI обработчиков (вызываются один раз)
+    setupUIHandlers(socket);
+}
 
 // Глобальная переменная для socket (будет установлена при инициализации)
 let socket = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+let lastValue = ''; // Для совместного редактирования
 
 // Вспомогательные функции
 
@@ -678,20 +694,8 @@ if ('serviceWorker' in navigator) {
         });
 }
 
-    // Обработка push-уведомлений
-    socket.on('message', (message) => {
-        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification(`Новое сообщение от ${message.username}`, {
-                body: message.text,
-                icon: '/icon.svg',
-                tag: message.id
-            });
-        }
-    });
-    
-    // Инициализация UI обработчиков (вызываются один раз)
-    setupUIHandlers(socket);
-}
+// Запуск приложения
+initializeApp();
 
 // Настройка обработчиков UI (вызывается один раз)
 function setupUIHandlers(socket) {
@@ -740,7 +744,6 @@ function setupUIHandlers(socket) {
     });
 
     // Совместное редактирование
-    let lastValue = '';
     sharedDocument.addEventListener('input', (e) => {
         if (!currentRoom || !isEditorOpen || !socket) return;
         
