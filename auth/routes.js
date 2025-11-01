@@ -242,33 +242,42 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
-  router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
+  router.get('/github', (req, res, next) => {
+    console.log('GitHub OAuth: Initiating authentication');
+    passport.authenticate('github', { scope: ['user:email'] })(req, res, next);
+  });
+  
   router.get('/github/callback',
-    passport.authenticate('github', { session: false, failureRedirect: '/auth.html?error=oauth_failed' }),
-    (req, res) => {
-      try {
-        console.log('GitHub OAuth callback received, user:', req.user ? {
-          id: req.user.id,
-          username: req.user.username,
-          email: req.user.email
-        } : 'null');
-        
-        if (!req.user) {
-          console.error('GitHub OAuth callback: req.user is null');
-          return res.redirect('/auth.html?error=no_user');
+    (req, res, next) => {
+      console.log('GitHub OAuth callback received');
+      console.log('Query params:', req.query);
+      passport.authenticate('github', { session: false }, (err, user, info) => {
+        if (err) {
+          console.error('GitHub OAuth authentication error:', err);
+          console.error('Error details:', {
+            message: err.message,
+            stack: err.stack
+          });
+          return res.redirect('/auth.html?error=' + encodeURIComponent(err.message || 'GitHub authentication failed'));
         }
         
-        const token = generateToken(req.user);
-        console.log('GitHub OAuth successful, redirecting with token');
-        res.redirect(`/?token=${token}`);
-      } catch (error) {
-        console.error('GitHub OAuth callback error:', {
-          message: error.message,
-          stack: error.stack,
-          user: req.user ? { id: req.user.id } : 'null'
-        });
-        res.redirect('/auth.html?error=' + encodeURIComponent(error.message || 'oauth_failed'));
-      }
+        if (!user) {
+          console.error('GitHub OAuth: No user returned');
+          console.error('Info:', info);
+          return res.redirect('/auth.html?error=' + encodeURIComponent(info?.message || 'Failed to authenticate with GitHub'));
+        }
+        
+        try {
+          console.log('GitHub OAuth: User authenticated successfully:', user.id, user.email, user.username);
+          const token = generateToken(user);
+          console.log('GitHub OAuth: Token generated, redirecting to app');
+          res.redirect(`/?token=${token}`);
+        } catch (error) {
+          console.error('GitHub OAuth callback processing error:', error);
+          console.error('Error stack:', error.stack);
+          res.redirect('/auth.html?error=' + encodeURIComponent(error.message || 'Failed to process authentication'));
+        }
+      })(req, res, next);
     }
   );
 } else {

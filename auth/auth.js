@@ -248,25 +248,82 @@ async function getUserById(userId) {
   return null;
 }
 
+// Получение email из GitHub API (если не предоставлен в профиле)
+async function getGitHubEmail(accessToken) {
+  try {
+    const https = require('https');
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.github.com',
+        path: '/user/emails',
+        method: 'GET',
+        headers: {
+          'User-Agent': 'ChatApp',
+          'Authorization': `token ${accessToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        
+        res.on('end', () => {
+          try {
+            const emails = JSON.parse(data);
+            // Ищем primary email или берем первый
+            const primaryEmail = emails.find(e => e.primary) || emails[0];
+            if (primaryEmail && primaryEmail.email) {
+              resolve(primaryEmail.email);
+            } else {
+              resolve(null);
+            }
+          } catch (error) {
+            console.error('Error parsing GitHub emails:', error);
+            resolve(null);
+          }
+        });
+      });
+      
+      req.on('error', (error) => {
+        console.error('Error fetching GitHub email:', error);
+        resolve(null);
+      });
+      
+      req.end();
+    });
+  } catch (error) {
+    console.error('Error in getGitHubEmail:', error);
+    return null;
+  }
+}
+
 // OAuth пользователи
 async function findOrCreateOAuthUser(provider, profile, accessToken = null) {
   const users = await readUsers();
   
   // Получаем email из профиля (разные провайдеры имеют разную структуру)
   let email = null;
-  if (profile.emails && profile.emails.length > 0) {
-    // Приоритет: primary email, затем verified, затем первый
-    const primaryEmail = profile.emails.find(e => e.primary === true);
-    const verifiedEmail = profile.emails.find(e => e.verified === true && e.primary !== true);
-    if (primaryEmail) {
-      email = primaryEmail.value || primaryEmail;
-    } else if (verifiedEmail) {
-      email = verifiedEmail.value || verifiedEmail;
-    } else {
-      email = profile.emails[0].value || profile.emails[0];
-    }
+  if (profile.emails && profile.emails[0]) {
+    email = profile.emails[0].value || profile.emails[0];
   } else if (profile._json && profile._json.email) {
     email = profile._json.email;
+  } else if (provider === 'github' && profile._json && profile._json.email) {
+    email = profile._json.email;
+  }
+  
+  // Для GitHub: если email не найден, запрашиваем через API
+  if (!email && provider === 'github' && accessToken) {
+    console.log('GitHub email not in profile, fetching from API...');
+    email = await getGitHubEmail(accessToken);
+    if (email) {
+      console.log('GitHub email fetched from API:', email);
+    } else {
+      console.log('GitHub email not available from API (may be private)');
+    }
   }
   
   // Если email не найден, пытаемся создать пользователя по OAuth ID
@@ -287,32 +344,21 @@ async function findOrCreateOAuthUser(provider, profile, accessToken = null) {
     user = users.find(u => u.oauthId === String(oauthId) && u.oauthProvider === provider);
   }
   
-  // Получаем username из профиля (приоритет для разных провайдеров)
+  // Получаем username из профиля (для GitHub используем login)
   let username = null;
   if (provider === 'github') {
-    // Для GitHub: login (username) предпочтительнее displayName
-    username = profile._json?.login || profile.username || profile.displayName;
-  } else if (provider === 'google') {
-    // Для Google: displayName предпочтительнее email
-    username = profile.displayName || (email ? email.split('@')[0] : null);
-  } else if (provider === 'facebook') {
-    // Для Facebook: displayName
-    username = profile.displayName;
+    username = profile._json?.login || profile.username || profile.displayName || 
+               (email ? email.split('@')[0] : `user_${oauthId}`);
+  } else {
+    username = profile.displayName || profile.username || profile._json?.login || 
+               (email ? email.split('@')[0] : `user_${oauthId}`);
   }
-  
-  // Fallback: используем email или генерируем username
-  if (!username) {
-    username = email ? email.split('@')[0] : `user_${oauthId}`;
-  }
-  
-  // Очищаем username от пробелов и специальных символов
-  username = username.trim().replace(/\s+/g, '_').substring(0, 50);
   
   if (!user) {
     // Создаем нового пользователя
     if (!email) {
       // Генерируем временный email если его нет
-      email = `${username.toLowerCase().replace(/[^a-z0-9_]/g, '_')}_${provider}@oauth.local`;
+      email = `${username.toLowerCase().replace(/\s+/g, '_')}_${provider}@oauth.local`;
     }
     
     user = {
@@ -331,11 +377,7 @@ async function findOrCreateOAuthUser(provider, profile, accessToken = null) {
       lastLogin: new Date().toISOString()
     };
     users.push(user);
-    console.log(`Created new OAuth user: ${user.id} (${provider})`, {
-      username: user.username,
-      email: user.email,
-      hasAvatar: !!user.avatar
-    });
+    console.log(`Created new OAuth user: ${user.id} (${provider})`);
   } else {
     // Обновляем информацию существующего пользователя
     if (!user.authMethods) {
@@ -344,26 +386,15 @@ async function findOrCreateOAuthUser(provider, profile, accessToken = null) {
     if (!user.authMethods.includes(provider)) {
       user.authMethods.push(provider);
     }
-    // Обновляем OAuth ID если изменился провайдер или отсутствует
-    if (!user.oauthId || user.oauthProvider !== provider) {
-      user.oauthId = String(oauthId);
-      user.oauthProvider = provider;
-    }
-    // Обновляем avatar если его не было или он изменился
-    const newAvatar = (profile.photos && profile.photos[0] && profile.photos[0].value) || 
-                      (profile._json && profile._json.avatar_url);
-    if (newAvatar && (!user.avatar || user.avatar !== newAvatar)) {
-      user.avatar = newAvatar;
-    }
-    // Обновляем username если его не было
-    if (!user.username || user.username.startsWith('user_')) {
-      user.username = username;
+    user.oauthId = String(oauthId);
+    user.oauthProvider = provider;
+    if (profile.photos && profile.photos[0]) {
+      user.avatar = profile.photos[0].value;
+    } else if (profile._json && profile._json.avatar_url) {
+      user.avatar = profile._json.avatar_url;
     }
     user.lastLogin = new Date().toISOString();
-    console.log(`Updated OAuth user: ${user.id} (${provider})`, {
-      username: user.username,
-      email: user.email
-    });
+    console.log(`Updated OAuth user: ${user.id} (${provider})`);
   }
   
   await writeUsers(users);
