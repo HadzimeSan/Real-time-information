@@ -226,7 +226,7 @@ async function checkAuth() {
     }
 }
 
-// Проверяем OAuth провайдеры (но не скрываем кнопки, если проверка не удалась)
+// Проверяем OAuth провайдеры (но НЕ скрываем кнопки - оставляем их всегда видимыми)
 async function checkOAuthProviders() {
     const providers = ['google', 'github', 'facebook'];
     
@@ -234,47 +234,50 @@ async function checkOAuthProviders() {
         const btn = document.querySelector(`.oauth-btn.${provider}`);
         if (!btn) continue;
         
+        // Убеждаемся, что кнопка видима
+        btn.style.display = '';
+        
+        // Только логируем статус, но не скрываем кнопки
         try {
             const response = await fetch(`/auth/${provider}`, { 
                 method: 'GET',
-                redirect: 'manual' // Не следовать редиректам
+                redirect: 'manual'
             });
         
-            // Скрываем кнопку только если точно получили 503 статус
             if (response.status === 503) {
-                try {
-                    const data = await response.json();
-                    if (data.error && data.error.includes('not configured')) {
-                        btn.style.display = 'none';
-                        console.log(`${provider} OAuth not configured - hiding button`);
-                    }
-                } catch {
-                    // Если не удалось распарсить JSON, но статус 503 - скрываем
-                    btn.style.display = 'none';
-                    console.log(`${provider} OAuth returned 503 - hiding button`);
-                }
+                console.log(`${provider} OAuth not configured (button remains visible)`);
             } else if (response.status === 302 || response.status === 307 || response.status === 308) {
-                // Редирект означает, что OAuth настроен - кнопка должна быть видима
                 console.log(`${provider} OAuth is configured`);
             }
         } catch (error) {
-            // При ошибке сети/CORS оставляем кнопку видимой
-            // Возможно OAuth настроен, но проверка не прошла из-за CORS
-            console.log(`Could not check ${provider} OAuth status, leaving button visible:`, error.message);
+            console.log(`Could not check ${provider} OAuth status:`, error.message);
         }
     }
 }
+
+// Убеждаемся, что все OAuth кнопки видимы при загрузке
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.oauth-btn').forEach(btn => {
+        btn.style.display = '';
+        btn.style.visibility = 'visible';
+    });
+});
 
 // Если пользователь уже авторизован, перенаправляем
 checkAuth().then(isAuth => {
     if (isAuth) {
         window.location.href = '/';
     } else {
-        // Проверяем доступность OAuth провайдеров (но не скрываем кнопки агрессивно)
-        // Кнопки будут скрыты только если точно известно, что OAuth не настроен
+        // Убеждаемся, что кнопки видны, проверяем только для логирования
         setTimeout(() => {
+            // Сначала делаем все кнопки видимыми
+            document.querySelectorAll('.oauth-btn').forEach(btn => {
+                btn.style.display = '';
+                btn.style.visibility = 'visible';
+            });
+            // Затем проверяем (но не скрываем)
             checkOAuthProviders();
-        }, 500); // Небольшая задержка, чтобы не блокировать рендеринг
+        }, 100);
     }
 });
 
