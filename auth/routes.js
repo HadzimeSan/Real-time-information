@@ -20,6 +20,7 @@ const {
 // Получаем readUsers из модуля для проверки существующих пользователей
 const { readUsers } = authModule;
 const nodemailer = require('nodemailer');
+const https = require('https');
 
 // Настройка nodemailer для отправки email
 // Обрабатываем пароль: убираем пробелы (Gmail App Password обычно без пробелов)
@@ -138,7 +139,73 @@ router.post('/register', async (req, res) => {
     let emailSent = false;
     let emailError = null;
     
-    // Функция для отправки email с повторными попытками и переключением портов
+    // Сначала пробуем отправить через Resend API (если настроен) - обходит блокировку портов на Render
+    if (process.env.RESEND_API_KEY) {
+      try {
+        console.log('📧 Попытка отправить email через Resend API...');
+        const postData = JSON.stringify({
+          from: `ChatApp <${process.env.SMTP_USER || 'noreply@resend.dev'}>`,
+          to: email,
+          subject: 'Код подтверждения регистрации - ChatApp',
+          html: `
+            <h2>Код подтверждения регистрации</h2>
+            <p>Ваш код подтверждения:</p>
+            <h1 style="color: #4CAF50; font-size: 32px; text-align: center; letter-spacing: 5px;">${code}</h1>
+            <p>Введите этот код на странице регистрации для завершения регистрации.</p>
+            <p>Код действителен в течение 15 минут.</p>
+            <p>Если вы не запрашивали регистрацию, просто проигнорируйте это письмо.</p>
+          `
+        });
+        
+        const options = {
+          hostname: 'api.resend.com',
+          port: 443,
+          path: '/emails',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Length': Buffer.byteLength(postData)
+          },
+          timeout: 30000
+        };
+        
+        await new Promise((resolve, reject) => {
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+              if (res.statusCode === 200) {
+                const result = JSON.parse(data);
+                emailSent = true;
+                console.log(`✅ Email успешно отправлен через Resend на ${email}`);
+                console.log(`   Message ID: ${result.id || 'N/A'}`);
+                resolve(result);
+              } else {
+                reject(new Error(`Resend API error: ${res.statusCode} - ${data}`));
+              }
+            });
+          });
+          
+          req.on('error', reject);
+          req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Resend API timeout'));
+          });
+          
+          req.write(postData);
+          req.end();
+        });
+      } catch (resendError) {
+        console.warn('⚠️ Отправка через Resend не удалась, пробуем SMTP...');
+        console.warn('   Ошибка:', resendError.message);
+        // Продолжаем с обычным SMTP
+      }
+    }
+    
+    // Если Resend не настроен или не сработал, пробуем обычный SMTP
+    if (!emailSent) {
+      // Функция для отправки email с повторными попытками и переключением портов
     const sendEmailWithRetry = async (retries = 3) => {
       let lastError = null;
       
@@ -187,7 +254,7 @@ router.post('/register', async (req, res) => {
       throw lastError;
     };
     
-    // Создаем промис для отправки email с таймаутом
+      // Создаем промис для отправки email с таймаутом
     const sendEmailWithTimeout = Promise.race([
       sendEmailWithRetry(3), // 3 попытки отправки (с автоматическим переключением портов)
       new Promise((_, reject) => {
@@ -235,7 +302,18 @@ router.post('/register', async (req, res) => {
       // Игнорируем ошибку - код все равно вернем
       console.warn('⚠️ Не удалось дождаться результата отправки email, продолжаем...');
       console.warn('Причина:', e.message);
+      
+      // Если это таймаут SMTP, возможно Render блокирует порты
+      if (e.message.includes('timeout') || e.message.includes('Connection timeout')) {
+        console.error('❌ ВНИМАНИЕ: Render может блокировать исходящие SMTP соединения (порты 465, 587)!');
+        console.error('💡 РЕШЕНИЕ: Используйте Resend API (бесплатно до 100 писем/день)');
+        console.error('   1. Зарегистрируйтесь на https://resend.com');
+        console.error('   2. Получите API ключ в разделе API Keys');
+        console.error('   3. Добавьте RESEND_API_KEY в переменные окружения Render');
+        console.error('   4. Resend API использует HTTPS (порт 443), который не блокируется Render');
+      }
     }
+    } // конец if (!emailSent)
     
     // Возвращаем ответ с кодом
     // ВСЕГДА возвращаем код в development поле для удобства тестирования
