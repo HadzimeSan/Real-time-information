@@ -22,13 +22,16 @@ const { readUsers } = authModule;
 const nodemailer = require('nodemailer');
 
 // Настройка nodemailer для отправки email
+// Обрабатываем пароль: убираем пробелы (Gmail App Password обычно без пробелов)
+const smtpPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : '';
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.SMTP_PORT || '587'),
   secure: process.env.SMTP_SECURE === 'true', // для порта 465
   auth: {
     user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || ''
+    pass: smtpPass
   },
   // Дополнительные опции для лучшей совместимости
   tls: {
@@ -41,22 +44,45 @@ const transporter = nodemailer.createTransport({
 });
 
 // Проверка соединения с SMTP при старте
-if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+if (process.env.SMTP_USER && smtpPass) {
+  console.log('Проверка SMTP соединения...');
+  console.log('SMTP настройки:', {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER,
+    passLength: smtpPass.length,
+    passPreview: smtpPass ? `${smtpPass.substring(0, 4)}...${smtpPass.substring(smtpPass.length - 4)}` : 'не установлен'
+  });
+  
   transporter.verify((error, success) => {
     if (error) {
-      console.error('SMTP соединение не удалось:', error);
-      console.error('Проверьте настройки SMTP в переменных окружения:');
+      console.error('❌ SMTP соединение не удалось:', error);
+      console.error('Детали ошибки:', {
+        message: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode,
+        stack: error.stack
+      });
+      console.error('Проверьте настройки SMTP:');
       console.error('- SMTP_HOST:', process.env.SMTP_HOST || 'smtp.gmail.com');
       console.error('- SMTP_PORT:', process.env.SMTP_PORT || '587');
-      console.error('- SMTP_USER:', process.env.SMTP_USER ? 'установлен' : 'НЕ УСТАНОВЛЕН');
-      console.error('- SMTP_PASS:', process.env.SMTP_PASS ? 'установлен' : 'НЕ УСТАНОВЛЕН');
+      console.error('- SMTP_SECURE:', process.env.SMTP_SECURE || 'false');
+      console.error('- SMTP_USER:', process.env.SMTP_USER || 'НЕ УСТАНОВЛЕН');
+      console.error('- SMTP_PASS:', smtpPass ? `${smtpPass.length} символов` : 'НЕ УСТАНОВЛЕН');
+      console.error('⚠️  Убедитесь, что:');
+      console.error('  1. Gmail App Password правильный (без пробелов)');
+      console.error('  2. 2FA включен на Gmail аккаунте');
+      console.error('  3. App Password создан для правильного приложения');
     } else {
-      console.log('SMTP соединение успешно установлено');
+      console.log('✅ SMTP соединение успешно установлено');
       console.log('SMTP настроен для отправки email на:', process.env.SMTP_USER);
     }
   });
 } else {
-  console.warn('SMTP не настроен: SMTP_USER или SMTP_PASS отсутствуют');
+  console.warn('⚠️  SMTP не настроен: SMTP_USER или SMTP_PASS отсутствуют');
   console.warn('Для работы регистрации с подтверждением email необходимо настроить SMTP');
 }
 
@@ -80,7 +106,7 @@ router.post('/register', async (req, res) => {
     const code = await createEmailVerificationCode(email, password, username);
     
     // Проверяем наличие SMTP настроек
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    if (!process.env.SMTP_USER || !smtpPass) {
       console.error('SMTP не настроен: SMTP_USER или SMTP_PASS отсутствуют');
       // Возвращаем код сразу (не ждем отправки email)
       return res.json({
@@ -95,6 +121,9 @@ router.post('/register', async (req, res) => {
     }
     
     // Отправляем email с кодом (асинхронно, не блокируем ответ)
+    console.log(`📧 Попытка отправить код подтверждения на ${email}...`);
+    console.log(`📧 Отправитель: ${process.env.SMTP_USER}`);
+    
     const sendEmailPromise = transporter.sendMail({
       from: process.env.SMTP_USER,
       to: email,
@@ -108,16 +137,27 @@ router.post('/register', async (req, res) => {
         <p>Если вы не запрашивали регистрацию, просто проигнорируйте это письмо.</p>
       `
     }).then((mailInfo) => {
-      console.log(`Email успешно отправлен на ${email}:`, mailInfo.messageId);
+      console.log(`✅ Email успешно отправлен на ${email}`);
+      console.log(`   Message ID: ${mailInfo.messageId}`);
+      console.log(`   Response: ${mailInfo.response || 'OK'}`);
     }).catch((emailError) => {
-      console.error('Ошибка отправки email на', email, ':', emailError);
+      console.error(`❌ Ошибка отправки email на ${email}:`, emailError);
       console.error('Детали ошибки:', {
         message: emailError.message,
         code: emailError.code,
         command: emailError.command,
         response: emailError.response,
-        responseCode: emailError.responseCode
+        responseCode: emailError.responseCode,
+        stack: emailError.stack
       });
+      
+      // Дополнительная диагностика для Gmail
+      if (emailError.responseCode === 535 || emailError.code === 'EAUTH') {
+        console.error('⚠️  Проблема с аутентификацией Gmail:');
+        console.error('   - Проверьте правильность App Password');
+        console.error('   - Убедитесь, что 2FA включен на аккаунте');
+        console.error('   - Убедитесь, что App Password создан правильно');
+      }
     });
     
     // Добавляем таймаут для отправки email (чтобы не ждать вечно)
@@ -135,7 +175,7 @@ router.post('/register', async (req, res) => {
     
     // Возвращаем ответ сразу с кодом (не ждем отправки email)
     // Всегда возвращаем код в development поле для удобства тестирования
-    
+
     // (код показывается только на странице регистрации)
     res.json({
       success: true,
