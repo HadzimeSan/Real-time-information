@@ -10,6 +10,7 @@ const session = require('express-session');
 const passport = require('./auth/passport-config');
 const authRoutes = require('./auth/routes');
 const { verifyToken, getUserById } = require('./auth/auth');
+const { loadRooms, saveRoomsDebounced, saveRoomsImmediate } = require('./storage/persistence');
 
 const app = express();
 const server = http.createServer(app);
@@ -52,13 +53,27 @@ const upload = multer({ storage: storage });
 
 // Хранилище данных
 const users = new Map(); // socketId -> user info
-const rooms = new Map(); // roomId -> { users: Set, content: string, cursors: Map, messages: Array }
 const typingUsers = new Map(); // roomId -> Set of typing users
 
-// Инициализация дефолтных комнат
-rooms.set('general', { users: new Set(), content: '', cursors: new Map(), messages: [] });
-rooms.set('random', { users: new Set(), content: '', cursors: new Map(), messages: [] });
-rooms.set('development', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+// Загружаем комнаты из файла при старте
+let rooms = loadRooms();
+
+// Инициализация дефолтных комнат (только если их нет в сохраненных данных)
+if (!rooms.has('general')) {
+  rooms.set('general', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+}
+if (!rooms.has('random')) {
+  rooms.set('random', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+}
+if (!rooms.has('development')) {
+  rooms.set('development', { users: new Set(), content: '', cursors: new Map(), messages: [] });
+}
+
+// Сохраняем дефолтные комнаты если они были только что созданы
+if (rooms.size > 0) {
+  saveRoomsImmediate(rooms);
+  console.log('Initialized default rooms and saved to disk');
+}
 
 // Middleware для аутентификации Socket.io
 io.use(async (socket, next) => {
@@ -143,6 +158,10 @@ io.on('connection', (socket) => {
     if (!rooms.has(roomId)) {
       console.log(`Creating new room: ${roomId}`);
       rooms.set(roomId, { users: new Set(), content: '', cursors: new Map(), messages: [] });
+      // Сохраняем создание новой комнаты
+      saveRoomsImmediate(rooms);
+      // Уведомляем всех о новом списке комнат
+      io.emit('rooms-list', Array.from(rooms.keys()));
     }
 
     const room = rooms.get(roomId);
@@ -274,6 +293,9 @@ io.on('connection', (socket) => {
       room.messages = room.messages.slice(-500);
     }
 
+    // Сохраняем изменения в файл
+    saveRoomsDebounced(rooms);
+
     console.log(`Message sent by ${user.username} in ${user.currentRoom}:`, message.text.substring(0, 50));
     console.log(`Broadcasting to room ${user.currentRoom}, room has ${room.users.size} users`);
     
@@ -341,6 +363,9 @@ io.on('connection', (socket) => {
       updateCursorsForDelete(room, data.position, data.length);
     }
 
+    // Сохраняем изменения документа в файл
+    saveRoomsDebounced(rooms);
+
     // Отправляем изменения другим пользователям
     socket.to(user.currentRoom).emit('document-updated', {
       operation: data.operation,
@@ -399,6 +424,9 @@ io.on('connection', (socket) => {
     if (room.messages.length > 500) {
       room.messages = room.messages.slice(-500);
     }
+
+    // Сохраняем изменения в файл
+    saveRoomsDebounced(rooms);
 
     io.to(user.currentRoom).emit('file-uploaded', fileMessage);
   });
@@ -519,5 +547,31 @@ app.get('/sw.js', (req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Chat persistence enabled. Data will be saved to: data/rooms.json`);
 });
+
+// Graceful shutdown - сохраняем данные при завершении работы сервера
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server and saving data...');
+  saveRoomsImmediate(rooms);
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server and saving data...');
+  saveRoomsImmediate(rooms);
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+});
+
+// Сохраняем данные периодически (каждые 5 минут) на случай неожиданного завершения
+setInterval(() => {
+  saveRoomsImmediate(rooms);
+  console.log('Periodic save completed');
+}, 5 * 60 * 1000); // 5 минут
 
