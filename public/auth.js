@@ -18,18 +18,25 @@ if (error) {
         case 'no_user':
             errorMessage = 'Не удалось получить информацию о пользователе. Попробуйте снова.';
             break;
+        case 'not_configured':
+            errorMessage = 'OAuth не настроен на сервере. Обратитесь к администратору или используйте Email/Password/Magic Link для входа.';
+            break;
         default:
-            errorMessage = decodeURIComponent(error) || 'Ошибка входа';
+            const decodedError = decodeURIComponent(error);
+            if (decodedError.includes('не настроен') || decodedError.includes('not configured')) {
+                errorMessage = 'OAuth провайдер не настроен. Используйте Email/Password или Magic Link для входа. Для настройки OAuth см. инструкцию в файле OAUTH_QUICK_SETUP.md';
+            } else {
+                errorMessage = decodedError || 'Ошибка входа';
+            }
     }
     showError(errorMessage);
 }
 
-// Обработка клика по OAuth кнопкам с проверкой ошибок
+// Обработка клика по OAuth кнопкам
 document.querySelectorAll('.oauth-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-        // Не блокируем клик - позволяем стандартному поведению ссылки
-        // Если OAuth не настроен, сервер вернет ошибку, которую мы обработаем
-        // Если настроен - произойдет нормальный редирект
+        // Разрешаем переход - если OAuth настроен, произойдет редирект
+        // Если не настроен - пользователь увидит ошибку на странице или будет редирект обратно с ошибкой
     });
 });
 

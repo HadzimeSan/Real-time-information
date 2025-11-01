@@ -233,7 +233,11 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 } else {
   // Проброска для информативного сообщения
   router.get('/google', (req, res) => {
-    res.status(503).json({ error: 'Google OAuth not configured' });
+    res.status(503).json({ 
+      error: 'Google OAuth не настроен',
+      message: 'Для использования Google OAuth необходимо настроить переменные окружения GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET в настройках сервера.',
+      setupGuide: '/OAUTH_SETUP.md'
+    });
   });
 }
 
@@ -256,7 +260,11 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
   );
 } else {
   router.get('/github', (req, res) => {
-    res.status(503).json({ error: 'GitHub OAuth not configured' });
+    res.status(503).json({ 
+      error: 'GitHub OAuth не настроен',
+      message: 'Для использования GitHub OAuth необходимо настроить переменные окружения GITHUB_CLIENT_ID и GITHUB_CLIENT_SECRET в настройках сервера.',
+      setupGuide: '/OAUTH_SETUP.md'
+    });
   });
 }
 
@@ -279,7 +287,11 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
   );
 } else {
   router.get('/facebook', (req, res) => {
-    res.status(503).json({ error: 'Facebook OAuth not configured' });
+    res.status(503).json({ 
+      error: 'Facebook OAuth не настроен',
+      message: 'Для использования Facebook OAuth необходимо настроить переменные окружения FACEBOOK_APP_ID и FACEBOOK_APP_SECRET в настройках сервера.',
+      setupGuide: '/OAUTH_SETUP.md'
+    });
   });
 }
 
