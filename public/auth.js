@@ -256,12 +256,31 @@ async function checkOAuthProviders() {
 }
 
 // Убеждаемся, что все OAuth кнопки видимы при загрузке
-document.addEventListener('DOMContentLoaded', () => {
+function ensureOAuthButtonsVisible() {
     document.querySelectorAll('.oauth-btn').forEach(btn => {
-        btn.style.display = '';
+        btn.style.display = 'flex';
         btn.style.visibility = 'visible';
+        btn.style.opacity = '1';
     });
+    const oauthContainer = document.querySelector('.oauth-buttons');
+    if (oauthContainer) {
+        oauthContainer.style.display = 'flex';
+        oauthContainer.style.visibility = 'visible';
+    }
+}
+
+// Вызываем сразу
+ensureOAuthButtonsVisible();
+
+// И при загрузке DOM
+document.addEventListener('DOMContentLoaded', () => {
+    ensureOAuthButtonsVisible();
 });
+
+// И через небольшой таймаут для надежности
+setTimeout(ensureOAuthButtonsVisible, 50);
+setTimeout(ensureOAuthButtonsVisible, 200);
+setTimeout(ensureOAuthButtonsVisible, 500);
 
 // Если пользователь уже авторизован, перенаправляем
 checkAuth().then(isAuth => {
@@ -269,13 +288,10 @@ checkAuth().then(isAuth => {
         window.location.href = '/';
     } else {
         // Убеждаемся, что кнопки видны, проверяем только для логирования
+        ensureOAuthButtonsVisible();
         setTimeout(() => {
-            // Сначала делаем все кнопки видимыми
-            document.querySelectorAll('.oauth-btn').forEach(btn => {
-                btn.style.display = '';
-                btn.style.visibility = 'visible';
-            });
-            // Затем проверяем (но не скрываем)
+            ensureOAuthButtonsVisible();
+            // Проверяем статус (но не скрываем)
             checkOAuthProviders();
         }, 100);
     }

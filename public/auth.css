@@ -182,13 +182,14 @@ body {
 }
 
 .oauth-buttons {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     gap: 12px;
+    visibility: visible !important;
 }
 
 .oauth-btn {
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     gap: 10px;
@@ -200,6 +201,8 @@ body {
     font-weight: 500;
     transition: all 0.3s;
     font-size: 14px;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .oauth-btn:hover {
