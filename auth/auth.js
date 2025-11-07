@@ -9,16 +9,12 @@ const crypto = require('crypto');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const USERS_FILE = path.join(__dirname, '../data/users.json');
 const MAGIC_LINKS_FILE = path.join(__dirname, '../data/magic-links.json');
-const EMAIL_VERIFICATIONS_FILE = path.join(__dirname, '../data/email-verifications.json');
-const PHONE_VERIFICATIONS_FILE = path.join(__dirname, '../data/phone-verifications.json');
 
 // Инициализация файлов данных
 async function initDataFiles() {
   try {
     await fs.mkdir(path.dirname(USERS_FILE), { recursive: true });
     await fs.mkdir(path.dirname(MAGIC_LINKS_FILE), { recursive: true });
-    await fs.mkdir(path.dirname(EMAIL_VERIFICATIONS_FILE), { recursive: true });
-    await fs.mkdir(path.dirname(PHONE_VERIFICATIONS_FILE), { recursive: true });
     
     try {
       await fs.access(USERS_FILE);
@@ -30,18 +26,6 @@ async function initDataFiles() {
       await fs.access(MAGIC_LINKS_FILE);
     } catch {
       await fs.writeFile(MAGIC_LINKS_FILE, JSON.stringify([]));
-    }
-    
-    try {
-      await fs.access(EMAIL_VERIFICATIONS_FILE);
-    } catch {
-      await fs.writeFile(EMAIL_VERIFICATIONS_FILE, JSON.stringify([]));
-    }
-    
-    try {
-      await fs.access(PHONE_VERIFICATIONS_FILE);
-    } catch {
-      await fs.writeFile(PHONE_VERIFICATIONS_FILE, JSON.stringify([]));
     }
   } catch (error) {
     console.error('Error initializing data files:', error);
@@ -78,262 +62,7 @@ async function writeMagicLinks(links) {
   await fs.writeFile(MAGIC_LINKS_FILE, JSON.stringify(links, null, 2));
 }
 
-// Чтение/запись кодов подтверждения email
-async function readEmailVerifications() {
-  try {
-    const data = await fs.readFile(EMAIL_VERIFICATIONS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-async function writeEmailVerifications(verifications) {
-  await fs.writeFile(EMAIL_VERIFICATIONS_FILE, JSON.stringify(verifications, null, 2));
-}
-
-// Создание кода подтверждения email
-async function createEmailVerificationCode(email, password, username) {
-  const verifications = await readEmailVerifications();
-  
-  // Проверяем, нет ли уже незавершенной верификации для этого email
-  const existing = verifications.find(v => v.email === email && !v.verified && new Date(v.expiresAt) > new Date());
-  if (existing) {
-    // Удаляем старый код
-    const index = verifications.indexOf(existing);
-    verifications.splice(index, 1);
-  }
-  
-  // Генерируем 6-значный код
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 минут
-  
-  verifications.push({
-    email,
-    password,
-    username,
-    code,
-    expiresAt: expiresAt.toISOString(),
-    verified: false,
-    attempts: 0,
-    createdAt: new Date().toISOString()
-  });
-  
-  await writeEmailVerifications(verifications);
-  
-  return code;
-}
-
-// Проверка кода подтверждения email
-async function verifyEmailCode(email, code) {
-  const verifications = await readEmailVerifications();
-  const verification = verifications.find(v => v.email === email && !v.verified);
-  
-  if (!verification) {
-    throw new Error('Код подтверждения не найден или уже использован');
-  }
-  
-  // Проверяем срок действия
-  if (new Date(verification.expiresAt) < new Date()) {
-    throw new Error('Код подтверждения истек. Запросите новый код.');
-  }
-  
-  // Увеличиваем счетчик попыток
-  verification.attempts = (verification.attempts || 0) + 1;
-  
-  // Проверяем код
-  if (verification.code !== code) {
-    if (verification.attempts >= 5) {
-      // Удаляем после 5 неудачных попыток
-      const index = verifications.indexOf(verification);
-      verifications.splice(index, 1);
-      await writeEmailVerifications(verifications);
-      throw new Error('Превышено количество попыток. Запросите новый код.');
-    }
-    await writeEmailVerifications(verifications);
-    throw new Error('Неверный код подтверждения');
-  }
-  
-  // Код верный - помечаем как проверенный
-  verification.verified = true;
-  verification.verifiedAt = new Date().toISOString();
-  await writeEmailVerifications(verifications);
-  
-  // Возвращаем данные для создания пользователя
-  return {
-    email: verification.email,
-    password: verification.password,
-    username: verification.username
-  };
-}
-
-// Чтение/запись телефонных верификаций
-async function readPhoneVerifications() {
-  try {
-    const data = await fs.readFile(PHONE_VERIFICATIONS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-async function writePhoneVerifications(verifications) {
-  await fs.writeFile(PHONE_VERIFICATIONS_FILE, JSON.stringify(verifications, null, 2));
-}
-
-// Создание кода подтверждения для телефона
-async function createPhoneVerificationCode(phone, password, username) {
-  const verifications = await readPhoneVerifications();
-  
-  // Нормализуем номер телефона (убираем пробелы, дефисы)
-  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-  
-  // Проверяем, нет ли уже незавершенной верификации для этого телефона
-  const existing = verifications.find(v => v.phone === normalizedPhone && !v.verified && new Date(v.expiresAt) > new Date());
-  if (existing) {
-    // Удаляем старый код
-    const index = verifications.indexOf(existing);
-    verifications.splice(index, 1);
-  }
-  
-  // Генерируем 6-значный код
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 минут
-  
-  verifications.push({
-    phone: normalizedPhone,
-    password,
-    username,
-    code,
-    expiresAt: expiresAt.toISOString(),
-    verified: false,
-    attempts: 0,
-    createdAt: new Date().toISOString()
-  });
-  
-  await writePhoneVerifications(verifications);
-  
-  return code;
-}
-
-// Проверка кода подтверждения для телефона
-async function verifyPhoneCode(phone, code) {
-  const verifications = await readPhoneVerifications();
-  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-  const verification = verifications.find(v => v.phone === normalizedPhone && !v.verified);
-  
-  if (!verification) {
-    throw new Error('Код подтверждения не найден или уже использован');
-  }
-  
-  // Проверяем срок действия
-  if (new Date(verification.expiresAt) < new Date()) {
-    throw new Error('Код подтверждения истек. Запросите новый код.');
-  }
-  
-  // Увеличиваем счетчик попыток
-  verification.attempts = (verification.attempts || 0) + 1;
-  
-  // Проверяем код
-  if (verification.code !== code) {
-    if (verification.attempts >= 5) {
-      // Удаляем после 5 неудачных попыток
-      const index = verifications.indexOf(verification);
-      verifications.splice(index, 1);
-      await writePhoneVerifications(verifications);
-      throw new Error('Превышено количество попыток. Запросите новый код.');
-    }
-    await writePhoneVerifications(verifications);
-    throw new Error('Неверный код подтверждения');
-  }
-  
-  // Код верный - помечаем как проверенный
-  verification.verified = true;
-  verification.verifiedAt = new Date().toISOString();
-  await writePhoneVerifications(verifications);
-  
-  // Возвращаем данные для создания пользователя
-  return {
-    phone: verification.phone,
-    password: verification.password,
-    username: verification.username
-  };
-}
-
-// Регистрация пользователя через телефон
-async function registerUserByPhone(phone, password, username) {
-  const users = await readUsers();
-  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-  
-  if (users.find(u => u.phone === normalizedPhone)) {
-    throw new Error('User with this phone number already exists');
-  }
-  
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const user = {
-    id: crypto.randomUUID(),
-    phone: normalizedPhone,
-    username: username || normalizedPhone,
-    password: hashedPassword,
-    authMethods: ['phone'],
-    twoFactorEnabled: false,
-    twoFactorSecret: null,
-    createdAt: new Date().toISOString(),
-    lastLogin: null
-  };
-  
-  users.push(user);
-  await writeUsers(users);
-  return user;
-}
-
-// Вход через телефон
-async function loginUserByPhone(phone, password) {
-  const users = await readUsers();
-  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
-  const user = users.find(u => u.phone === normalizedPhone);
-  
-  if (!user) {
-    throw new Error('Invalid phone number or password');
-  }
-  
-  const isValid = await bcrypt.compare(password, user.password);
-  if (!isValid) {
-    throw new Error('Invalid phone number or password');
-  }
-  
-  // Обновляем время последнего входа
-  user.lastLogin = new Date().toISOString();
-  await writeUsers(users);
-  
-  return user;
-}
-
-// Email/пароль аутентификация
-async function registerUser(email, password, username) {
-  const users = await readUsers();
-  
-  if (users.find(u => u.email === email)) {
-    throw new Error('User with this email already exists');
-  }
-  
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const user = {
-    id: crypto.randomUUID(),
-    email,
-    username: username || email.split('@')[0],
-    password: hashedPassword,
-    authMethods: ['email'],
-    twoFactorEnabled: false,
-    twoFactorSecret: null,
-    createdAt: new Date().toISOString(),
-    lastLogin: null
-  };
-  
-  users.push(user);
-  await writeUsers(users);
-  return user;
-}
+// Email/пароль аутентификация (только для входа существующих пользователей)
 
 async function loginUser(email, password) {
   const users = await readUsers();
@@ -706,7 +435,6 @@ async function findOrCreateOAuthUser(provider, profile, accessToken = null) {
 }
 
 module.exports = {
-  registerUser,
   loginUser,
   generateToken,
   verifyToken,
@@ -717,12 +445,6 @@ module.exports = {
   require2FA,
   getUserById,
   findOrCreateOAuthUser,
-  createEmailVerificationCode,
-  verifyEmailCode,
-  createPhoneVerificationCode,
-  verifyPhoneCode,
-  registerUserByPhone,
-  loginUserByPhone,
   readUsers
 };
 
