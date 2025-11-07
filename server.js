@@ -4,13 +4,30 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const session = require('express-session');
-const passport = require('./auth/passport-config');
-const authRoutes = require('./auth/routes');
-const { verifyToken, getUserById } = require('./auth/auth');
-const { loadRooms, saveRoomsDebounced, saveRoomsImmediate } = require('./storage/persistence');
+
+// Инициализация модулей с обработкой ошибок
+let passport, authRoutes, verifyToken, getUserById, loadRooms, saveRoomsDebounced, saveRoomsImmediate;
+
+try {
+  passport = require('./auth/passport-config');
+  authRoutes = require('./auth/routes');
+  const authModule = require('./auth/auth');
+  verifyToken = authModule.verifyToken;
+  getUserById = authModule.getUserById;
+  const persistenceModule = require('./storage/persistence');
+  loadRooms = persistenceModule.loadRooms;
+  saveRoomsDebounced = persistenceModule.saveRoomsDebounced;
+  saveRoomsImmediate = persistenceModule.saveRoomsImmediate;
+  console.log('✅ All modules loaded successfully');
+} catch (error) {
+  console.error('❌ Error loading modules:', error);
+  console.error('Stack trace:', error.stack);
+  process.exit(1);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -39,10 +56,36 @@ app.use(passport.session());
 // Аутентификация маршруты
 app.use('/auth', authRoutes);
 
+// Создаем необходимые директории при старте
+const uploadsDir = path.join(__dirname, 'uploads');
+const dataDir = path.join(__dirname, 'data');
+
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log('Created uploads directory:', uploadsDir);
+  }
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log('Created data directory:', dataDir);
+  }
+} catch (error) {
+  console.error('Error creating directories:', error);
+  // Не останавливаем сервер, но логируем ошибку
+}
+
 // Настройка Multer для загрузки файлов
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    // Убеждаемся, что директория существует перед сохранением
+    if (!fs.existsSync(uploadsDir)) {
+      try {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      } catch (err) {
+        return cb(err);
+      }
+    }
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + '-' + file.originalname);
@@ -56,7 +99,14 @@ const users = new Map(); // socketId -> user info
 const typingUsers = new Map(); // roomId -> Set of typing users
 
 // Загружаем комнаты из файла при старте
-let rooms = loadRooms();
+let rooms;
+try {
+  rooms = loadRooms();
+  console.log('Rooms loaded successfully');
+} catch (error) {
+  console.error('Error loading rooms, starting with empty rooms:', error);
+  rooms = new Map();
+}
 
 // Инициализация дефолтных комнат (только если их нет в сохраненных данных)
 let needsSave = false;
@@ -556,15 +606,52 @@ app.get('/sw.js', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Chat persistence enabled. Data will be saved to: data/rooms.json`);
+
+// Обработка ошибок при запуске сервера
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Please use a different port.`);
+  } else {
+    console.error('Server error:', error);
+  }
+  process.exit(1);
+});
+
+// Запускаем сервер с обработкой ошибок
+try {
+  server.listen(PORT, () => {
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`📁 Chat persistence enabled. Data will be saved to: data/rooms.json`);
+    console.log(`📁 Uploads directory: ${uploadsDir}`);
+  });
+} catch (error) {
+  console.error('❌ Failed to start server:', error);
+  process.exit(1);
+}
+
+// Обработка необработанных исключений и отклоненных промисов
+// Это предотвращает автоматическую перезагрузку сервера на Render
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack trace:', error.stack);
+  // НЕ завершаем процесс сразу, даем серверу шанс продолжить работу
+  // Render автоматически перезапустит сервер, если он упадет
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Логируем, но не завершаем процесс
 });
 
 // Graceful shutdown - сохраняем данные при завершении работы сервера
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server and saving data...');
-  saveRoomsImmediate(rooms);
+  try {
+    saveRoomsImmediate(rooms);
+  } catch (error) {
+    console.error('Error saving rooms on shutdown:', error);
+  }
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
@@ -573,7 +660,11 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT signal received: closing HTTP server and saving data...');
-  saveRoomsImmediate(rooms);
+  try {
+    saveRoomsImmediate(rooms);
+  } catch (error) {
+    console.error('Error saving rooms on shutdown:', error);
+  }
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
@@ -582,7 +673,11 @@ process.on('SIGINT', () => {
 
 // Сохраняем данные периодически (каждые 5 минут) на случай неожиданного завершения
 setInterval(() => {
-  saveRoomsImmediate(rooms);
-  console.log('Periodic save completed');
+  try {
+    saveRoomsImmediate(rooms);
+    console.log('Periodic save completed');
+  } catch (error) {
+    console.error('Error during periodic save:', error);
+  }
 }, 5 * 60 * 1000); // 5 минут
 
