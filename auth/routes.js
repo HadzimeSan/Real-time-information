@@ -26,7 +26,82 @@ const { readUsers } = authModule;
 const nodemailer = require('nodemailer');
 const https = require('https');
 
-// Функция для отправки SMS через Twilio
+// Функция для отправки SMS через SMS.ru (для России)
+async function sendSMSViaSMSru(phone, code) {
+  if (!process.env.SMSRU_API_ID) {
+    console.warn('⚠️ SMS.ru не настроен: SMSRU_API_ID отсутствует');
+    return false;
+  }
+
+  try {
+    // Нормализуем номер для SMS.ru (убираем + и оставляем только цифры)
+    const normalizedPhone = phone.replace(/[^\d]/g, '');
+    const message = `Ваш код подтверждения: ${code}. Действителен 15 минут.`;
+    
+    const querystring = require('querystring');
+    const postData = querystring.stringify({
+      api_id: process.env.SMSRU_API_ID,
+      to: normalizedPhone,
+      msg: message,
+      json: 1 // Получаем ответ в JSON формате
+    });
+
+    const options = {
+      hostname: 'sms.ru',
+      port: 443,
+      path: '/sms/send',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 30000
+    };
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+            if (result.status === 'OK' && result.status_code === 100) {
+              console.log(`✅ SMS успешно отправлено на ${phone} через SMS.ru`);
+              console.log(`   SMS ID: ${result.sms_id || 'N/A'}`);
+              console.log(`   Баланс: ${result.balance || 'N/A'} руб.`);
+              resolve(true);
+            } else {
+              const errorMsg = result.status_text || `SMS.ru API error: ${result.status_code}`;
+              console.error(`❌ SMS.ru API error: ${errorMsg}`);
+              reject(new Error(errorMsg));
+            }
+          } catch (parseError) {
+            console.error(`❌ Ошибка парсинга ответа SMS.ru: ${data}`);
+            reject(new Error(`SMS.ru response parse error: ${data}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        console.error('❌ Ошибка отправки SMS через SMS.ru:', error);
+        reject(error);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('SMS.ru API timeout'));
+      });
+
+      req.write(postData);
+      req.end();
+    });
+  } catch (error) {
+    console.error('❌ Ошибка при отправке SMS через SMS.ru:', error);
+    return false;
+  }
+}
+
+// Функция для отправки SMS через Twilio (для международных номеров)
 async function sendSMSViaTwilio(phone, code) {
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
     console.warn('⚠️ Twilio не настроен: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN или TWILIO_PHONE_NUMBER отсутствуют');
@@ -93,6 +168,35 @@ async function sendSMSViaTwilio(phone, code) {
     console.error('❌ Ошибка при отправке SMS через Twilio:', error);
     return false;
   }
+}
+
+// Универсальная функция отправки SMS (пробует разные провайдеры)
+async function sendSMS(phone, code) {
+  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
+  
+  // Определяем, российский ли номер (начинается с +7 или 7 или 8)
+  const isRussianNumber = /^(\+?7|8)/.test(normalizedPhone);
+  
+  // Для российских номеров пробуем SMS.ru, для остальных - Twilio
+  if (isRussianNumber) {
+    console.log(`📱 Определен российский номер: ${normalizedPhone}, используем SMS.ru`);
+    try {
+      const result = await sendSMSViaSMSru(normalizedPhone, code);
+      if (result) return true;
+    } catch (error) {
+      console.warn('⚠️ SMS.ru не сработал, пробуем Twilio:', error.message);
+    }
+  }
+  
+  // Пробуем Twilio (для международных номеров или как fallback)
+  try {
+    const result = await sendSMSViaTwilio(normalizedPhone, code);
+    if (result) return true;
+  } catch (error) {
+    console.warn('⚠️ Twilio не сработал:', error.message);
+  }
+  
+  return false;
 }
 
 // Настройка nodemailer для отправки email
@@ -496,12 +600,12 @@ router.post('/phone/register', async (req, res) => {
     // Генерируем и отправляем код подтверждения
     const code = await createPhoneVerificationCode(phone, password, username);
     
-    // Отправляем SMS через Twilio
+    // Отправляем SMS (автоматически выбирает провайдера: SMS.ru для России, Twilio для остальных)
     let smsSent = false;
     let smsError = null;
     
     try {
-      smsSent = await sendSMSViaTwilio(normalizedPhone, code);
+      smsSent = await sendSMS(normalizedPhone, code);
     } catch (error) {
       smsError = error;
       console.error('Ошибка отправки SMS:', error);
