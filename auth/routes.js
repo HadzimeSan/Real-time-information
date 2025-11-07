@@ -14,13 +14,86 @@ const {
   require2FA,
   getUserById,
   createEmailVerificationCode,
-  verifyEmailCode
+  verifyEmailCode,
+  createPhoneVerificationCode,
+  verifyPhoneCode,
+  registerUserByPhone,
+  loginUserByPhone
 } = authModule;
 
 // Получаем readUsers из модуля для проверки существующих пользователей
 const { readUsers } = authModule;
 const nodemailer = require('nodemailer');
 const https = require('https');
+
+// Функция для отправки SMS через Twilio
+async function sendSMSViaTwilio(phone, code) {
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_PHONE_NUMBER) {
+    console.warn('⚠️ Twilio не настроен: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN или TWILIO_PHONE_NUMBER отсутствуют');
+    return false;
+  }
+
+  try {
+    // Используем встроенный https модуль вместо установки twilio пакета
+    const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+    const message = `Ваш код подтверждения: ${code}. Действителен 15 минут.`;
+    
+    // Используем querystring для совместимости
+    const querystring = require('querystring');
+    const postData = querystring.stringify({
+      To: phone,
+      From: process.env.TWILIO_PHONE_NUMBER,
+      Body: message
+    });
+
+    const options = {
+      hostname: 'api.twilio.com',
+      port: 443,
+      path: `/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 30000
+    };
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode === 200 || res.statusCode === 201) {
+            const result = JSON.parse(data);
+            console.log(`✅ SMS успешно отправлено на ${phone} через Twilio`);
+            console.log(`   Message SID: ${result.sid || 'N/A'}`);
+            resolve(true);
+          } else {
+            console.error(`❌ Twilio API error: ${res.statusCode} - ${data}`);
+            reject(new Error(`Twilio API error: ${res.statusCode} - ${data}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        console.error('❌ Ошибка отправки SMS через Twilio:', error);
+        reject(error);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Twilio API timeout'));
+      });
+
+      req.write(postData);
+      req.end();
+    });
+  } catch (error) {
+    console.error('❌ Ошибка при отправке SMS через Twilio:', error);
+    return false;
+  }
+}
 
 // Настройка nodemailer для отправки email
 // Обрабатываем пароль: убираем пробелы (Gmail App Password обычно без пробелов)
@@ -400,6 +473,136 @@ router.post('/verify-email', async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// Регистрация через телефон - отправка кода подтверждения
+router.post('/phone/register', async (req, res) => {
+  try {
+    const { phone, password, username } = req.body;
+    
+    if (!phone || !password) {
+      return res.status(400).json({ error: 'Phone number and password are required' });
+    }
+    
+    // Проверяем, не существует ли уже пользователь с таким телефоном
+    const users = await readUsers();
+    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
+    const existingUser = users.find(u => u.phone === normalizedPhone);
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this phone number already exists' });
+    }
+    
+    // Генерируем и отправляем код подтверждения
+    const code = await createPhoneVerificationCode(phone, password, username);
+    
+    // Отправляем SMS через Twilio
+    let smsSent = false;
+    let smsError = null;
+    
+    try {
+      smsSent = await sendSMSViaTwilio(normalizedPhone, code);
+    } catch (error) {
+      smsError = error;
+      console.error('Ошибка отправки SMS:', error);
+    }
+    
+    // Возвращаем ответ с кодом (для разработки)
+    const responseData = {
+      success: true,
+      message: smsSent ? 'Код подтверждения отправлен на ваш номер телефона' : 'Код подтверждения сгенерирован',
+      development: {
+        verificationCode: code,
+        message: smsSent 
+          ? 'SMS отправлено. Проверьте телефон или используйте код ниже.' 
+          : (smsError 
+            ? `Не удалось отправить SMS: ${smsError.message}. Используйте код ниже.` 
+            : 'Twilio не настроен. Используйте код ниже для тестирования.'),
+        smsSent: smsSent,
+        smsError: smsError ? smsError.message : null
+      }
+    };
+    
+    res.json(responseData);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Подтверждение телефона и создание пользователя
+router.post('/phone/verify', async (req, res) => {
+  try {
+    const { phone, code } = req.body;
+    
+    if (!phone || !code) {
+      return res.status(400).json({ error: 'Phone number and code are required' });
+    }
+    
+    // Проверяем код подтверждения
+    const userData = await verifyPhoneCode(phone, code);
+    
+    // Создаем пользователя
+    const user = await registerUserByPhone(userData.phone, userData.password, userData.username);
+    const token = generateToken(user);
+    
+    res.json({
+      success: true,
+      message: 'Телефон подтвержден. Регистрация завершена!',
+      token,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        username: user.username,
+        twoFactorEnabled: user.twoFactorEnabled
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Вход по телефону/пароль
+router.post('/phone/login', async (req, res) => {
+  try {
+    const { phone, password, twoFactorToken } = req.body;
+    
+    if (!phone || !password) {
+      return res.status(400).json({ error: 'Phone number and password are required' });
+    }
+    
+    const user = await loginUserByPhone(phone, password);
+    
+    // Проверяем, требуется ли 2FA
+    const needs2FA = await require2FA(user.id);
+    if (needs2FA) {
+      if (!twoFactorToken) {
+        return res.status(200).json({
+          success: false,
+          requires2FA: true,
+          message: '2FA token required'
+        });
+      }
+      
+      const isValid2FA = await verify2FA(user.id, twoFactorToken);
+      if (!isValid2FA) {
+        return res.status(401).json({ error: 'Invalid 2FA token' });
+      }
+    }
+    
+    const token = generateToken(user);
+    
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        username: user.username,
+        twoFactorEnabled: user.twoFactorEnabled
+      }
+    });
+  } catch (error) {
+    res.status(401).json({ error: error.message });
   }
 });
 
