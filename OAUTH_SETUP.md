@@ -10,19 +10,53 @@
 
 ## 📘 Google OAuth
 
+### 🔗 Где найти KEY и VALUE от Google:
+
+**Прямая ссылка:** [Google Cloud Console - Credentials](https://console.cloud.google.com/apis/credentials)
+
 ### 1. Создание проекта
 1. Перейдите на [Google Cloud Console](https://console.cloud.google.com/)
-2. Создайте новый проект или выберите существующий
-3. Включите Google+ API
+2. Войдите в свой Google аккаунт
+3. Создайте новый проект или выберите существующий:
+   - Нажмите на выпадающий список проектов вверху
+   - Нажмите **New Project**
+   - Введите название проекта (например: "ChatApp")
+   - Нажмите **Create**
 
-### 2. Создание OAuth 2.0 Credentials
+### 2. Настройка OAuth Consent Screen
+1. Перейдите в **APIs & Services** → **OAuth consent screen**
+   - Или по прямой ссылке: [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
+2. Выберите **External** (для тестирования) или **Internal** (только для Google Workspace)
+3. Заполните обязательные поля:
+   - **App name**: ChatApp (или ваше название)
+   - **User support email**: ваш email
+   - **Developer contact information**: ваш email
+4. Нажмите **Save and Continue**
+5. На экране **Scopes** нажмите **Save and Continue** (можно оставить по умолчанию)
+6. На экране **Test users** (если выбрали External):
+   - Добавьте тестовые email адреса, которые будут использовать приложение
+   - Или нажмите **Save and Continue** (можно добавить позже)
+7. Нажмите **Back to Dashboard**
+
+### 3. Создание OAuth 2.0 Credentials
 1. Перейдите в **APIs & Services** → **Credentials**
-2. Нажмите **Create Credentials** → **OAuth client ID**
-3. Выберите тип приложения: **Web application**
-4. Добавьте Authorized redirect URIs:
-   - Для локальной разработки: `http://localhost:3000/auth/google/callback`
-   - Для продакшена: `https://your-app.onrender.com/auth/google/callback`
-5. Сохраните **Client ID** и **Client Secret**
+   - Или по прямой ссылке: [Credentials](https://console.cloud.google.com/apis/credentials)
+2. Нажмите **+ CREATE CREDENTIALS** → **OAuth client ID**
+3. Если появится предупреждение о OAuth consent screen - нажмите **Configure Consent Screen** и завершите настройку (см. шаг 2)
+4. Выберите тип приложения: **Web application**
+5. Заполните:
+   - **Name**: ChatApp Web Client (или любое название)
+   - **Authorized JavaScript origins** (опционально):
+     - Для локальной разработки: `http://localhost:3000`
+     - Для продакшена: `https://your-app.onrender.com`
+   - **Authorized redirect URIs** (обязательно!):
+     - Для локальной разработки: `http://localhost:3000/auth/google/callback`
+     - Для продакшена: `https://your-app.onrender.com/auth/google/callback`
+6. Нажмите **CREATE**
+7. **Скопируйте и сохраните:**
+   - **Client ID** (это будет `GOOGLE_CLIENT_ID`)
+   - **Client secret** (это будет `GOOGLE_CLIENT_SECRET`)
+   - ⚠️ **Важно:** Client secret показывается только один раз! Сохраните его сразу.
 
 ### 3. Настройка переменных окружения
 ```env

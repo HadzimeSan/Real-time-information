@@ -33,12 +33,18 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     callbackURL: googleCallbackURL
   }, async (accessToken, refreshToken, profile, done) => {
     try {
-      console.log('Google OAuth profile:', profile.id, profile.emails?.[0]?.value);
+      console.log('Google OAuth callback received');
+      console.log('Profile ID:', profile.id);
+      console.log('Profile displayName:', profile.displayName);
+      console.log('Profile emails:', profile.emails);
+      console.log('Profile _json:', JSON.stringify(profile._json, null, 2));
+      console.log('Access token received:', accessToken ? 'yes' : 'no');
       const user = await findOrCreateOAuthUser('google', profile);
-      console.log('Google OAuth user created/found:', user.id);
+      console.log('Google OAuth user created/found:', user.id, user.email, user.username);
       done(null, user);
     } catch (error) {
       console.error('Google OAuth error:', error);
+      console.error('Error stack:', error.stack);
       done(error, null);
     }
   }));

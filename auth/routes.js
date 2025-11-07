@@ -564,20 +564,48 @@ router.post('/2fa/verify', async (req, res) => {
 
 // OAuth маршруты (только если настроены)
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-  router.get('/google/callback', 
-    passport.authenticate('google', { session: false, failureRedirect: '/auth.html?error=oauth_failed' }), 
-    (req, res) => {
-      try {
-        if (!req.user) {
-          return res.redirect('/auth.html?error=no_user');
+  router.get('/google', (req, res, next) => {
+    console.log('Google OAuth: Initiating authentication');
+    passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+  });
+  
+  router.get('/google/callback',
+    (req, res, next) => {
+      console.log('Google OAuth callback received');
+      console.log('Query params:', req.query);
+      passport.authenticate('google', { session: false }, (err, user, info) => {
+        if (err) {
+          console.error('Google OAuth authentication error:', err);
+          console.error('Error details:', {
+            message: err.message,
+            stack: err.stack
+          });
+          return res.redirect('/auth.html?error=' + encodeURIComponent(err.message || 'Google authentication failed'));
         }
-        const token = generateToken(req.user);
-        res.redirect(`/?token=${token}`);
-      } catch (error) {
-        console.error('Google OAuth callback error:', error);
-        res.redirect('/auth.html?error=' + encodeURIComponent(error.message));
-      }
+        
+        if (!user) {
+          console.error('Google OAuth: No user returned');
+          console.error('Info:', info);
+          let errorMsg = 'Failed to authenticate with Google';
+          if (info?.message) {
+            errorMsg = info.message;
+          } else if (info?.error) {
+            errorMsg = `Google authentication error: ${info.error}`;
+          }
+          return res.redirect('/auth.html?error=' + encodeURIComponent(errorMsg));
+        }
+        
+        try {
+          console.log('Google OAuth: User authenticated successfully:', user.id, user.email, user.username);
+          const token = generateToken(user);
+          console.log('Google OAuth: Token generated, redirecting to app');
+          res.redirect(`/?token=${token}`);
+        } catch (error) {
+          console.error('Google OAuth callback processing error:', error);
+          console.error('Error stack:', error.stack);
+          res.redirect('/auth.html?error=' + encodeURIComponent(error.message || 'Failed to process authentication'));
+        }
+      })(req, res, next);
     }
   );
 } else {
